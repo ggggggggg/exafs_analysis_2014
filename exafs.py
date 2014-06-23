@@ -23,3 +23,12 @@ def apply_cuts(data, cuts):
     for ds in data:
         ds.apply_cuts(cuts)
 
+def drift_correct(data):
+    for ds in data:
+        ds.drift_correct()
+
+def phase_correct(data,typical_resolution):
+    # note that typical resolution must be in units of p_pulse_rms
+    for ds in data:
+        ds.phase_correct2014(typical_resolution)
+

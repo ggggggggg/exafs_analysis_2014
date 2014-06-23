@@ -23,3 +23,14 @@ exafs.avg_pulse(data) # creates masks and compute average pulses
 data.plot_average_pulses(-1)
 data.compute_filters(f_3db=10000.0)
 data.filter_data_tdm(forceNew=False)
+exafs.drift_correct(data)
+
+import pulse_timing
+ds = data.first_good_dataset
+pulse_timing.dataset_periodogram2(ds)
+
+
+
+
+
+
