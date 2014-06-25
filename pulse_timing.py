@@ -1,6 +1,7 @@
 import pylab as plt, numpy as np
 import mass
 import scipy.signal, scipy.optimize
+import exafs
 
 
 import scipy.signal, scipy.optimize
@@ -28,6 +29,7 @@ def lombscarg(timestamp, timestamp_times_f0, f_hz):
     return scipy.signal.lombscargle(timestamp, np.cos(TWOPI*timestamp_times_f0), np.array(f_hz*TWOPI,ndmin=1))
 
 def periodic_median(timestamp, f0):
+    # finds the offset required to make the median 0.5, the backs out what the true median must be to require that offset
     p0=0
     maxj = 3
     for j in xrange(maxj+1):
@@ -115,3 +117,109 @@ def periodogram(timestamp, cut_lines = [0.47,0.515], flatten=True, split=True):
 
 def dataset_periodogram2(ds):
     periodogram2(ds.p_timestamp)
+
+def extrap(x, xp, yp):
+    """np.interp function with linear extrapolation"""
+    y = np.interp(x, xp, yp)
+    y[x < xp[0]] = yp[0] + (x[x<xp[0]]-xp[0]) * (yp[0]-yp[1]) / (xp[0]-xp[1])
+    y[x > xp[-1]]= yp[-1] + (x[x>xp[-1]]-xp[-1])*(yp[-1]-yp[-2])/(xp[-1]-xp[-2])
+    return y
+
+def downsampled(x, samples_per_newsample):
+    resampled_len = int(np.floor(len(x)/samples_per_newsample))
+    reshaped_x = np.reshape(x[:resampled_len*samples_per_newsample], (resampled_len, samples_per_newsample))
+    return np.mean(reshaped_x, 1)
+
+
+def calc_laser_phase(data):
+    ds = data.first_good_dataset
+    phase, spline = calc_phase(ds.p_timestamp)
+    for ds in data:
+        if not hasattr(ds, "p_laser_phase"):
+            ds.p_laser_phase = spline.phase(ds.p_timestamp)
+
+def choose_laser(data, band, cut_lines=[0.47,0.515]):
+    """
+    uses the dataset.cuts object to mark bad all pulses not in a specific category related
+    to laser timing
+    :param data: a microcal TESChannelGroup object
+    :param band: options: (1,2,"laser", "not_laser") for( band1, band2, band1 and band2, not_laser pulses)
+    :param cut_lines: same as phase_2band_find
+    :return: None
+    """
+    band = str(band).lower()
+    print("Applying cuts to choose laser band %s"%band.upper())
+    cutnum = data.first_good_dataset.CUT_NAME.index('timing')
+    for ds in data:
+        band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
+        ds.cuts.clearCut(cutnum)
+        if band == "pumped":
+            if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+            band=str(ds.pumped_band_knowledge)
+        if band == 'unpumped':
+            if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+            if ds.pumped_band_knowledge==1:
+                band='2'
+            else:
+                band = '1'
+        if band == '1':
+            ds.cuts.cut(cutnum, np.logical_not(band1))
+        elif band == '2':
+            ds.cuts.cut(cutnum, np.logical_not(band2))
+        elif band == 'not_laser':
+            ds.cuts.cut(cutnum, np.logical_not(bandNone))
+        elif band == "laser":
+            ds.cuts.cut(cutnum, bandNone)
+
+def mic_triggers_as_timestamps(ds):
+    crate_epoch_usec, crate_frame = mass.load_aux_file(ds.filename)
+    # the ratio of diff(crate_epoch_usec) to diff(crate_frame) appears to follow a pattern  with period 4
+    # one sample with a much higher than average ratio, two with typical ratios, one with much lower ratio
+    # so I would like to resample both of them such that each sample is now the average of 4 (or a multiple of 4)
+    # other samples, maybe roughy 1 second is good
+    period_entries = 4 # psuedo-period in plot of diff(crate_epoch_usec), it was 4 when I looked, but it may not always be 4
+    resample_period_s = 1
+    samples_per_newsample = int(period_entries*np.ceil(1e6*resample_period_s/(period_entries*np.mean(np.diff(crate_epoch_usec)))))
+    resampled_crate_epoch = downsampled(crate_epoch_usec, samples_per_newsample)
+    resampled_crate_frame = downsampled(crate_frame, samples_per_newsample)
+    mic_epoch_usec = mass.load_mic_file(ds.filename)
+    measured_mic_latency = -0.18557235449876053
+    mic_frame_adjustment = -measured_mic_latency/ds.timebase
+    mic_frame = extrap(mic_epoch_usec, resampled_crate_epoch, resampled_crate_frame)+mic_frame_adjustment
+    return mic_frame*ds.timebase
+
+def label_pumped_band_for_alternating_pump(ds, pump_freq_hz=500, doPlot=True):
+    mic_timestamps = mic_triggers_as_timestamps(ds)
+    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase)
+    band1_timestamps = ds.p_timestamp[band1]
+    band2_timestamps = ds.p_timestamp[band2]
+    #cut out mic_timestamps that come before or after ds timestamps
+    mic_timestamps = mic_timestamps[np.logical_and(mic_timestamps>ds.p_timestamp[0], mic_timestamps<ds.p_timestamp[-2])]
+    mic_index_band1 = np.searchsorted(band1_timestamps, mic_timestamps)
+    mic_index_band2 = np.searchsorted(band2_timestamps, mic_timestamps)
+    band1_med_diff = np.abs(0.5-periodic_median((band1_timestamps[mic_index_band1]-mic_timestamps), pump_freq_hz))
+    band2_med_diff = np.abs(0.5-periodic_median((band2_timestamps[mic_index_band2]-mic_timestamps), pump_freq_hz))
+    diff_diff = np.abs(band1_med_diff-band2_med_diff)
+    if diff_diff < 0.4:
+        raise ValueError("ambiguous which band is pumped")
+    if band1_med_diff<band2_med_diff:
+    # xrays occuring simultaneous to a microphone trigger should have phase 1 or 0
+    # xrays occuring on a laser pulse not simultaneous to a microphone trigger should have phase 0.5
+    # for alternating pumped - unpumped
+        pumped = 2
+    else:
+        pumped = 1
+
+    ds.pumped_band_knowledge = pumped
+
+    if doPlot:
+        a,b="pumped", "unpumped"
+        if pumped==2: a,b=b,a
+        plt.figure()
+        #plt.plot(mic_timestamps,'.')
+        plt.plot(band1_timestamps[mic_index_band1],(pump_freq_hz*(band1_timestamps[mic_index_band1]-mic_timestamps))%1,'.',label="band1 %s"%a)
+        plt.plot(band2_timestamps[mic_index_band2],(pump_freq_hz*(band2_timestamps[mic_index_band2]-mic_timestamps))%1,'.',label="band2 %s"%b)
+        plt.xlabel("frame time (s)")
+        plt.ylabel("x-ray phase difference from nearest microphone timestamps")
+        plt.legend()
+    return pumped

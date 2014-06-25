@@ -88,35 +88,7 @@ def good_pulses_data(ds, max_records=20000):
             break
     return data, g[:end]
 
-def calc_laser_phase(data):
-    ds = data.first_good_dataset
-    phase, spline = pulse_timing.calc_phase(ds.p_timestamp)
-    for ds in data:
-        if not hasattr(ds, "p_laser_phase"):
-            ds.p_laser_phase = spline.phase(ds.p_timestamp)
 
-def choose_laser(data, band, cut_lines=[0.47,0.515]):
-    """
-    uses the dataset.cuts object to mark bad all pulses not in a specific category related
-    to laser timing
-    :param data: a microcal TESChannelGroup object
-    :param band: options: (1,2,"laser", "not_laser") for( band1, band2, band1 and band2, not_laser pulses)
-    :param cut_lines: same as pulse_timing.phase_2band_find
-    :return: None
-    """
-    band = str(band).lower()
-    cutnum = data.first_good_dataset.CUT_NAME.index('timing')
-    for ds in data:
-        band1, band2, bandNone = pulse_timing.phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
-        ds.cuts.clearCut(cutnum)
-        if band == '1':
-            ds.cuts.cut(cutnum, np.logical_not(band1))
-        elif band == '2':
-            ds.cuts.cut(cutnum, np.logical_not(band2))
-        elif band == 'not_laser':
-            ds.cuts.cut(cutnum, np.logical_not(bandNone))
-        elif band == "laser":
-            ds.cuts.cut(cutnum, bandNone)
 
 ## calibration
 from mass.calibration import young
