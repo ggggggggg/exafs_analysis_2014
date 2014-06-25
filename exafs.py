@@ -108,6 +108,7 @@ def choose_laser(data, band, cut_lines=[0.47,0.515]):
     cutnum = data.first_good_dataset.CUT_NAME.index('timing')
     for ds in data:
         band1, band2, bandNone = pulse_timing.phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
+        ds.cuts.clearCut(cutnum)
         if band == '1':
             ds.cuts.cut(cutnum, np.logical_not(band1))
         elif band == '2':
@@ -116,3 +117,54 @@ def choose_laser(data, band, cut_lines=[0.47,0.515]):
             ds.cuts.cut(cutnum, np.logical_not(bandNone))
         elif band == "laser":
             ds.cuts.cut(cutnum, bandNone)
+
+## calibration
+from mass.calibration import young
+
+def is_calibrated(cal):
+    if hasattr(cal,"npts"): # checks for Joe style calibration
+        return False
+    if cal.elements is None: # then checks for now many elements are fitted for
+        return False
+    return True
+
+def calibrate(data, attr, line_names,name_ext="",eps=10, mcs=20, hw=200, excl=(), plot_on_fail=False, forceNew=False):
+    for ds in data:
+        calibrate_dataset(ds, attr, line_names,name_ext,eps, mcs, hw, excl, plot_on_fail, forceNew)
+
+def calibrate_dataset(ds, attr, line_names,name_ext="",eps=10, mcs=20, hw=200, excl=(), plot_on_fail=False, forceNew=False):
+    calname = attr+name_ext
+    if ds.calibration.has_key(calname):
+        cal = ds.calibration[calname]
+        if is_calibrated(cal) and not forceNew:
+            print("Not calibrating chan %d %s because it already exists"%(ds.channum, calname))
+            return None
+        # first does this already exist? if the calibration already exists and has more than 1 pt,
+        # we probably dont need to redo it
+    cal = young.EnergyCalibration(eps, mcs, hw, excl, plot_on_fail)
+    cal.fit(getattr(ds, attr)[ds.cuts.good()], line_names)
+    ds.calibration[calname]=cal
+    return cal
+
+def convert_to_energy_dataset(ds, attr, calname=None):
+    if calname is None: calname = attr
+    if not ds.calibration.has_key(calname):
+        raise ValueError("For chan %d calibration %s does not exist"(ds.channum, calname))
+    cal = ds.calibration[calname]
+    ds.p_energy = cal.ph2energy(getattr(ds, attr))
+
+def convert_to_energy(data, attr, calname=None):
+    if calname is None: calname = attr
+    print("for all channels converting %s to energy with calibration %s"%(attr, calname))
+    for ds in data:
+        convert_to_energy_dataset(ds, attr, calname)
+
+# ds = data.channel[1]
+# ycal = young.EnergyCalibration(eps=10,mcs=20, excl=["MnKBeta", "FeKBeta"])
+# ycal.fit(ds.p_filt_value_dc[ds.cuts.good()], ['MnKAlpha', 'CuKAlpha', 'VKAlpha', 'ScKAlpha', 'CoKAlpha', 'FeKAlpha', 'CuKBeta'])
+# young.diagnose_calibration(ycal, True)
+#
+# ds = data.channel[1]
+# cal = calibrate_dataset(ds, ds, 'p_filt_value_dc', ['MnKAlpha', 'CuKAlpha', 'VKAlpha', 'ScKAlpha', 'CoKAlpha', 'FeKAlpha', 'CuKBeta'],
+#                         eps=10,mcs=20, excl=["MnKBeta", "FeKBeta"])
+
