@@ -24,9 +24,15 @@ def apply_cuts(data, cuts):
     for ds in data:
         ds.apply_cuts(cuts)
 
-def drift_correct(data):
+def is_drift_corrected(ds):
+    return not all(ds.p_filt_value_dc == 0)
+
+def drift_correct(data, forceNew=False):
     for ds in data:
-        ds.drift_correct()
+        if not is_drift_corrected(ds) and not forceNew:
+            ds.drift_correct()
+        else:
+            print("Chan %d already drift corrected, not repeating."%ds.channum)
 
 def phase_correct(data,typical_resolution):
     # note that typical resolution must be in units of p_pulse_rms
