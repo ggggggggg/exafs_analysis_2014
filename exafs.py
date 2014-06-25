@@ -20,24 +20,13 @@ def avg_pulse(data, max_pulses_to_use=7000):
             m[max_pulses_to_use:] = False
     data.compute_average_pulse(masks)
 
-def apply_cuts(data, cuts):
-    for ds in data:
-        ds.apply_cuts(cuts)
+
 
 def is_drift_corrected(ds):
     return not all(ds.p_filt_value_dc == 0)
 
-def drift_correct(data, forceNew=False):
-    for ds in data:
-        if not is_drift_corrected(ds) and not forceNew:
-            ds.drift_correct()
-        else:
-            print("Chan %d already drift corrected, not repeating."%ds.channum)
 
-def phase_correct(data,typical_resolution):
-    # note that typical resolution must be in units of p_pulse_rms
-    for ds in data:
-        ds.phase_correct2014(typical_resolution, plot=True)
+
 
 def phase_correct2014_dataset(self, typical_resolution, plot=False):
     """Apply the phase correction that seems good for calibronium-like
@@ -90,46 +79,15 @@ def good_pulses_data(ds, max_records=20000):
 
 
 
-## calibration
-from mass.calibration import young
 
-def is_calibrated(cal):
-    if hasattr(cal,"npts"): # checks for Joe style calibration
-        return False
-    if cal.elements is None: # then checks for now many elements are fitted for
-        return False
-    return True
 
-def calibrate(data, attr, line_names,name_ext="",eps=10, mcs=20, hw=200, excl=(), plot_on_fail=False, forceNew=False):
-    for ds in data:
-        calibrate_dataset(ds, attr, line_names,name_ext,eps, mcs, hw, excl, plot_on_fail, forceNew)
 
-def calibrate_dataset(ds, attr, line_names,name_ext="",eps=10, mcs=20, hw=200, excl=(), plot_on_fail=False, forceNew=False):
-    calname = attr+name_ext
-    if ds.calibration.has_key(calname):
-        cal = ds.calibration[calname]
-        if is_calibrated(cal) and not forceNew:
-            print("Not calibrating chan %d %s because it already exists"%(ds.channum, calname))
-            return None
-        # first does this already exist? if the calibration already exists and has more than 1 pt,
-        # we probably dont need to redo it
-    cal = young.EnergyCalibration(eps, mcs, hw, excl, plot_on_fail)
-    cal.fit(getattr(ds, attr)[ds.cuts.good()], line_names)
-    ds.calibration[calname]=cal
-    return cal
 
-def convert_to_energy_dataset(ds, attr, calname=None):
-    if calname is None: calname = attr
-    if not ds.calibration.has_key(calname):
-        raise ValueError("For chan %d calibration %s does not exist"(ds.channum, calname))
-    cal = ds.calibration[calname]
-    ds.p_energy = cal.ph2energy(getattr(ds, attr))
 
-def convert_to_energy(data, attr, calname=None):
-    if calname is None: calname = attr
-    print("for all channels converting %s to energy with calibration %s"%(attr, calname))
-    for ds in data:
-        convert_to_energy_dataset(ds, attr, calname)
+
+
+
+
 
 # ds = data.channel[1]
 # ycal = young.EnergyCalibration(eps=10,mcs=20, excl=["MnKBeta", "FeKBeta"])

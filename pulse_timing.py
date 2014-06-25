@@ -148,7 +148,7 @@ def choose_laser(data, band, cut_lines=[0.47,0.515]):
     :return: None
     """
     band = str(band).lower()
-    print("Applying cuts to choose laser band %s"%band.upper())
+    print("Choosing otherwise good %s pulses via cuts."%band.upper())
     cutnum = data.first_good_dataset.CUT_NAME.index('timing')
     for ds in data:
         band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
