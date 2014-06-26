@@ -2,3 +2,5 @@
 *.pyc
 
 exafs.pyc
+
+*.spectrum

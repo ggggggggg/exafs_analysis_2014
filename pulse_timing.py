@@ -138,7 +138,7 @@ def calc_laser_phase(data):
         if not hasattr(ds, "p_laser_phase"):
             ds.p_laser_phase = spline.phase(ds.p_timestamp)
 
-def choose_laser(data, band, cut_lines=[0.47,0.515]):
+def choose_laser_dataset(ds, band, cut_lines=[0.47,0.515]):
     """
     uses the dataset.cuts object to mark bad all pulses not in a specific category related
     to laser timing
@@ -148,28 +148,31 @@ def choose_laser(data, band, cut_lines=[0.47,0.515]):
     :return: None
     """
     band = str(band).lower()
+    cutnum = ds.CUT_NAME.index('timing')
+    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
+    ds.cuts.clearCut(cutnum)
+    if band == "pumped":
+        if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+        band=str(ds.pumped_band_knowledge)
+    if band == 'unpumped':
+        if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+        if ds.pumped_band_knowledge==1:
+            band='2'
+        else:
+            band = '1'
+    if band == '1':
+        ds.cuts.cut(cutnum, np.logical_not(band1))
+    elif band == '2':
+        ds.cuts.cut(cutnum, np.logical_not(band2))
+    elif band == 'not_laser':
+        ds.cuts.cut(cutnum, np.logical_not(bandNone))
+    elif band == "laser":
+        ds.cuts.cut(cutnum, bandNone)
+
+def choose_laser(data, band, cut_lines=[0.47,0.515]):
     print("Choosing otherwise good %s pulses via cuts."%band.upper())
-    cutnum = data.first_good_dataset.CUT_NAME.index('timing')
     for ds in data:
-        band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
-        ds.cuts.clearCut(cutnum)
-        if band == "pumped":
-            if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-            band=str(ds.pumped_band_knowledge)
-        if band == 'unpumped':
-            if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-            if ds.pumped_band_knowledge==1:
-                band='2'
-            else:
-                band = '1'
-        if band == '1':
-            ds.cuts.cut(cutnum, np.logical_not(band1))
-        elif band == '2':
-            ds.cuts.cut(cutnum, np.logical_not(band2))
-        elif band == 'not_laser':
-            ds.cuts.cut(cutnum, np.logical_not(bandNone))
-        elif band == "laser":
-            ds.cuts.cut(cutnum, bandNone)
+        choose_laser_dataset(ds, band, cut_lines)
 
 def mic_triggers_as_timestamps(ds):
     crate_epoch_usec, crate_frame = mass.load_aux_file(ds.filename)
@@ -188,7 +191,7 @@ def mic_triggers_as_timestamps(ds):
     mic_frame = extrap(mic_epoch_usec, resampled_crate_epoch, resampled_crate_frame)+mic_frame_adjustment
     return mic_frame*ds.timebase
 
-def label_pumped_band_for_alternating_pump(ds, pump_freq_hz=500, doPlot=True):
+def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot=True):
     mic_timestamps = mic_triggers_as_timestamps(ds)
     band1, band2, bandNone = phase_2band_find(ds.p_laser_phase)
     band1_timestamps = ds.p_timestamp[band1]
@@ -206,15 +209,13 @@ def label_pumped_band_for_alternating_pump(ds, pump_freq_hz=500, doPlot=True):
     # xrays occuring simultaneous to a microphone trigger should have phase 1 or 0
     # xrays occuring on a laser pulse not simultaneous to a microphone trigger should have phase 0.5
     # for alternating pumped - unpumped
-        pumped = 2
+        pumped_band = 2
     else:
-        pumped = 1
-
-    ds.pumped_band_knowledge = pumped
-
+        pumped_band = 1
+    ds.pumped_band_knowledge = pumped_band
     if doPlot:
         a,b="pumped", "unpumped"
-        if pumped==2: a,b=b,a
+        if pumped_band==2: a,b=b,a
         plt.figure()
         #plt.plot(mic_timestamps,'.')
         plt.plot(band1_timestamps[mic_index_band1],(pump_freq_hz*(band1_timestamps[mic_index_band1]-mic_timestamps))%1,'.',label="band1 %s"%a)
@@ -222,4 +223,10 @@ def label_pumped_band_for_alternating_pump(ds, pump_freq_hz=500, doPlot=True):
         plt.xlabel("frame time (s)")
         plt.ylabel("x-ray phase difference from nearest microphone timestamps")
         plt.legend()
-    return pumped
+    return pumped_band
+
+def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True):
+    ds = data.first_good_dataset
+    pumped_band = label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz, doPlot)
+    for ds in data:
+        ds.pumped_band_knowledge=pumped_band

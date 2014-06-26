@@ -12,21 +12,8 @@ basic_cuts = mass.core.controller.AnalysisControl(
     rise_time_ms=(None, 0.6),
     peak_time_ms=(None, 0.8))
 
-def avg_pulse(data, max_pulses_to_use=7000):
-    median_pulse_avg = np.array([np.median(ds.p_pulse_average[ds.good()]) for ds in data])
-    masks = data.make_masks([.95, 1.05], use_gains=True, gains=median_pulse_avg)
-    for m in masks:
-        if len(m) > max_pulses_to_use:
-            m[max_pulses_to_use:] = False
-    data.compute_average_pulse(masks)
-
-
-
 def is_drift_corrected(ds):
     return not all(ds.p_filt_value_dc == 0)
-
-
-
 
 def phase_correct2014_dataset(self, typical_resolution, plot=False):
     """Apply the phase correction that seems good for calibronium-like
@@ -77,24 +64,24 @@ def good_pulses_data(ds, max_records=20000):
             break
     return data, g[:end]
 
+def timestructure_dataset(ds, calname="p_filt_value_dc"):
+    pulse_timing.choose_laser_dataset(ds, "not_laser")
+    cal = ds.calibration[calname]
+    energy = ds.p_energy[ds.cuts.good()]
+    cmap = plt.get_cmap()
+    cmap = [cmap(i/float(len(cal.elements))) for i in xrange(len(cal.elements))]
 
+    plt.figure()
+    plt.plot(ds.p_timestamp[ds.cuts.good()], ds.p_energy[ds.cuts.good()],'.')
+    plt.xlabel("frame timestamp (s)")
+    plt.ylabel("p_energy")
+    plt.title("chan %d, not_laser pulses selected"%ds.channum)
 
-
-
-
-
-
-
-
-
-
-
-# ds = data.channel[1]
-# ycal = young.EnergyCalibration(eps=10,mcs=20, excl=["MnKBeta", "FeKBeta"])
-# ycal.fit(ds.p_filt_value_dc[ds.cuts.good()], ['MnKAlpha', 'CuKAlpha', 'VKAlpha', 'ScKAlpha', 'CoKAlpha', 'FeKAlpha', 'CuKBeta'])
-# young.diagnose_calibration(ycal, True)
-#
-# ds = data.channel[1]
-# cal = calibrate_dataset(ds, ds, 'p_filt_value_dc', ['MnKAlpha', 'CuKAlpha', 'VKAlpha', 'ScKAlpha', 'CoKAlpha', 'FeKAlpha', 'CuKBeta'],
-#                         eps=10,mcs=20, excl=["MnKBeta", "FeKBeta"])
-
+    for i,line_name in enumerate(cal.elements):
+        low,high = mass.energy_calibration.STANDARD_FEATURES[line_name]*np.array([0.99, 1.01])
+        use = np.logical_and(energy>low, energy<high)
+        use_time = ds.p_timestamp[ds.cuts.good()][use]
+        pfit = np.polyfit(use_time, energy[use],1)
+        plt.plot(use_time, np.polyval(pfit, use_time),c=cmap[i], label=line_name+" %0.2f eV/hr"%(pfit[0]*3600))
+        plt.plot(use_time, energy[use],'.',c=cmap[i])
+        plt.legend()
