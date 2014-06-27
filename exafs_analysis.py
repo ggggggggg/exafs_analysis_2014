@@ -16,9 +16,9 @@ available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.jo
 chan_nums = available_chans[:10]
 pulse_files = mass.ljh_chan_names(path.join(dir_base, dir_p), chan_nums)
 noise_files = mass.ljh_chan_names(path.join(dir_base, dir_n), chan_nums)
+data = mass.TESGroup(pulse_files, noise_files, auto_pickle=True)
 
 # analyze data
-data = mass.TESGroup(pulse_files, noise_files, auto_pickle=True)
 data.summarize_data_tdm(peak_time_microsec=220.0)
 data.compute_noise_spectra()
 data.apply_cuts(exafs.basic_cuts, forceNew=False) # forceNew is True by default for apply_cuts, unlike most else
@@ -49,11 +49,10 @@ exafs.fit_edges(data,"FeKEdge")
 
 mass.calibration.young.diagnose_calibration(ds.calibration['p_filt_value_dc'], True)
 exafs.timestructure_dataset(ds,"p_filt_value_dc")
-
+exafs.calibration_summary(data, "p_filt_value_dc")
 
 # save plots
 exafs.save_all_plots_as_pdf(data)
 
-# in development
 
 

@@ -15,8 +15,6 @@ basic_cuts = mass.core.controller.AnalysisControl(
     rise_time_ms=(None, 0.6),
     peak_time_ms=(None, 0.8))
 
-def is_drift_corrected(ds):
-    return not all(ds.p_filt_value_dc == 0)
 
 def phase_correct2014_dataset(self, typical_resolution, plot=False):
     """Apply the phase correction that seems good for calibronium-like
@@ -220,4 +218,18 @@ def fit_edges(data,edge_name , width_ev=400, bin_size_ev=3, fwhm_guess=10.0, doP
         plt.xlabel("channel number")
     return fit_params
 
+# in development
+def calibration_summary(data, calname):
+    elements = [ds.calibration[calname].elements for ds in data]
+    energy_resolution = [ds.calibration[calname].energy_resolutions for ds in data]
+    refined_peak_positions = [ds.calibration[calname].refined_peak_positions for ds in data]
 
+    energies = [mass.energy_calibration.STANDARD_FEATURES[name] for name in elements[0]]
+
+    plt.figure()
+    for j in xrange(len(elements)):
+        plt.plot(energies, energy_resolution[j],'.')
+    plt.xlabel("energy (eV)")
+    plt.ylabel("fwhm res from calibration (eV)")
+    plt.ylim(0,20)
+    plt.grid("on")
