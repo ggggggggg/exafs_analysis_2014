@@ -131,11 +131,11 @@ def downsampled(x, samples_per_newsample):
     return np.mean(reshaped_x, 1)
 
 
-def calc_laser_phase(data):
+def calc_laser_phase(data, forceNew=False):
     ds = data.first_good_dataset
     phase, spline = calc_phase(ds.p_timestamp)
     for ds in data:
-        if not hasattr(ds, "p_laser_phase"):
+        if not hasattr(ds, "p_laser_phase") or forceNew:
             ds.p_laser_phase = spline.phase(ds.p_timestamp)
 
 def choose_laser_dataset(ds, band, cut_lines=[0.47,0.515]):
@@ -168,6 +168,8 @@ def choose_laser_dataset(ds, band, cut_lines=[0.47,0.515]):
         ds.cuts.cut(cutnum, np.logical_not(bandNone))
     elif band == "laser":
         ds.cuts.cut(cutnum, bandNone)
+    else:
+        raise ValueError("%s is not a valid choice for choose_laser_dataset"%band)
 
 def choose_laser(data, band, cut_lines=[0.47,0.515]):
     print("Choosing otherwise good %s pulses via cuts."%band.upper())
