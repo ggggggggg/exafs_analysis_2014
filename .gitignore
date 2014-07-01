@@ -4,3 +4,7 @@
 exafs.pyc
 
 *.spectrum
+
+timestamp.py
+
+server_log.txt

@@ -6,6 +6,63 @@ import exafs
 
 import scipy.signal, scipy.optimize
 
+
+def monotonic_frame_ranges(frames):
+    starts = np.nonzero(np.diff(np.sign(np.diff(frames)))==2)[0]+1
+    ends = np.nonzero(np.diff(np.sign(np.diff(frames)))==-2)[0]+1
+    starts = np.hstack((0,starts))
+    ends = np.hstack((ends,len(frames)))
+    for j in range(len(starts)):
+        entries_in_aux_file = ends[j]-starts[j]
+        if entries_in_aux_file<4:
+            ends.pop(j)
+            starts.pop(j)
+    return starts, ends
+
+
+def monotonicity(ljh_fname):
+    crate_epoch_usec, crate_frame = mass.load_aux_file(ljh_fname)
+    starts, ends = monotonic_frame_ranges(np.array(crate_frame, dtype=np.int))
+
+    # the ratio of diff(crate_epoch_usec) to diff(crate_frame) appears to follow a pattern  with period 4
+    # one sample with a much higher than average ratio, two with typical ratios, one with much lower ratio
+    # so I would like to resample both of them such that each sample is now the average of 4 (or a multiple of 4)
+    # other samples, maybe roughy 1 second is good
+    period_entries = 4 # psuedo-period in plot of diff(crate_epoch_usec), it was 4 when I looked, but it may not always be 4
+    resampling_period_s = 1
+    samples_per_newsample = int(period_entries*np.ceil(1e6*resampling_period_s/(period_entries*np.mean(np.diff(crate_epoch_usec)))))
+    resampled_crate_epoch = []
+    resampled_crate_frame = []
+    for j in range(len(starts)):
+        resampled_crate_epoch.append(downsampled(crate_epoch_usec[starts[j]:ends[j]], samples_per_newsample))
+        resampled_crate_frame.append(downsampled(crate_frame[starts[j]:ends[j]], samples_per_newsample))
+
+    start_frames = [resampled_crate_frame[0][0]]
+    offsets = []
+    for j in range(len(starts)):
+        offsets.append(-resampled_crate_frame[j][0]+start_frames[j])
+        if j != len(starts)-1:
+            first_epoch_in_next = resampled_crate_epoch[j+1][0]
+            start_frames.append(extrap(np.array([first_epoch_in_next]), resampled_crate_epoch[j], resampled_crate_frame[j]+offsets[j]))
+
+    new_frame = [r+offsets[i] for i,r in enumerate(resampled_crate_frame)]
+
+    return offsets, np.hstack(resampled_crate_epoch), np.hstack(new_frame)
+
+
+def apply_offsets_for_monotonicity_dataset(offsets, ds):
+    ds_frame = ds.p_timestamp/ds.timebase
+    starts, ends = monotonic_frame_ranges(ds_frame)
+    if not all([s-e==1 for s,e in zip(starts[1:], ends[:-1])]):
+        raise AttributeError("chan %d has timestamps that can't be repair to monotonic"%ds.channum)
+    if len(starts)>1: # only apply corrections once
+        ds.p_timestamp = np.hstack([ds_frame[starts[j]:ends[j]+1]+offsets[j] for j in xrange(len(ends))])*ds.timebase
+
+def apply_offsets_for_monotonicity(data):
+    offsets, crate_epoch, crate_frame = monotonicity(data.first_good_dataset.filename)
+    for ds in data:
+        apply_offsets_for_monotonicity_dataset(offsets, ds)
+
 def find_f0(timestamp, f0_low, f0_high):
     f0_low, f0_high = np.sort([f0_low, f0_high])
     for j in xrange(5):
@@ -51,6 +108,7 @@ def sampled_phase(timestamp, f0, sample_time_s = 60):
 
 def splined_phase(timestamp, f0, sample_time_s=60):
     t_sample, phase = sampled_phase(timestamp, f0, sample_time_s)
+    phase = np.unwrap(phase*2*np.pi)/(2*np.pi)
     spline = mass.mathstat.CubicSpline(t_sample, phase)
     return spline
 
@@ -75,11 +133,10 @@ def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,10
     if f0 is None: f0 = find_f0(timestamp, f_guess_range[0],f_guess_range[1])
     if flatten:
         spline = splined_phase(timestamp, f0, sample_time_s)
-        spline.f0 = f0
         spline.phase = lambda timestamp: (0.5+(timestamp*f0-spline(timestamp)))%num_bands
-        return spline.phase(timestamp), spline
+        return spline.phase(timestamp),f0, spline
     else:
-        return (timestamp*f0)%num_bands, f0, None
+        return (timestamp*f0)%num_bands,f0, None
 
 def phase_2band_find(phase, cut_lines=[0.47,0.515]):
     a,b = np.amin(cut_lines), np.amax(cut_lines)
@@ -90,7 +147,7 @@ def phase_2band_find(phase, cut_lines=[0.47,0.515]):
 
 def periodogram2(timestamp, cut_lines = [0.47,0.515]):
     num_bands = 2
-    phase, spline = calc_phase(timestamp)
+    phase,f0, spline = calc_phase(timestamp)
     band1, band2, bandNone = phase_2band_find(phase, cut_lines)
     plt.figure()
     plt.plot(timestamp, phase,'.')
@@ -101,11 +158,11 @@ def periodogram2(timestamp, cut_lines = [0.47,0.515]):
         plt.plot([timestamp[0], timestamp[-1]], np.array([1,1])*(cut_lines[j%2]+(1 if j>1 else 0))%num_bands,'k')
     plt.xlabel("time (s)")
     plt.ylabel("flattened phase/2*pi")
-    plt.title("f0=%f"%spline.f0)
+    plt.title("f0=%f"%f0)
 
 def periodogram(timestamp, cut_lines = [0.47,0.515], flatten=True, split=True):
     num_bands = (2 if split else 1)
-    phase, spline = calc_phase(timestamp, flatten=flatten, num_bands = num_bands)
+    phase,f0,spline = calc_phase(timestamp, flatten=flatten, num_bands = num_bands)
     plt.figure()
     plt.plot(timestamp, phase,'.')
     if flatten:
@@ -113,7 +170,7 @@ def periodogram(timestamp, cut_lines = [0.47,0.515], flatten=True, split=True):
             plt.plot([timestamp[0], timestamp[-1]], np.array([1,1])*(cut_lines[j%2]+(1 if j>1 else 0))%num_bands,'k')
     plt.xlabel("time (s)")
     plt.ylabel("%sphase/2*pi"%("flattened " if split else ""))
-    plt.title("f0=%f"%spline.f0)
+    plt.title("f0=%f"%f0)
 
 def dataset_periodogram2(ds):
     periodogram2(ds.p_timestamp)
@@ -133,7 +190,7 @@ def downsampled(x, samples_per_newsample):
 
 def calc_laser_phase(data, forceNew=False):
     ds = data.first_good_dataset
-    phase, spline = calc_phase(ds.p_timestamp)
+    phase,f0, spline = calc_phase(ds.p_timestamp)
     for ds in data:
         if not hasattr(ds, "p_laser_phase") or forceNew:
             ds.p_laser_phase = spline.phase(ds.p_timestamp)
@@ -177,20 +234,13 @@ def choose_laser(data, band, cut_lines=[0.47,0.515]):
         choose_laser_dataset(ds, band, cut_lines)
 
 def mic_triggers_as_timestamps(ds):
-    crate_epoch_usec, crate_frame = mass.load_aux_file(ds.filename)
-    # the ratio of diff(crate_epoch_usec) to diff(crate_frame) appears to follow a pattern  with period 4
-    # one sample with a much higher than average ratio, two with typical ratios, one with much lower ratio
-    # so I would like to resample both of them such that each sample is now the average of 4 (or a multiple of 4)
-    # other samples, maybe roughy 1 second is good
-    period_entries = 4 # psuedo-period in plot of diff(crate_epoch_usec), it was 4 when I looked, but it may not always be 4
-    resample_period_s = 1
-    samples_per_newsample = int(period_entries*np.ceil(1e6*resample_period_s/(period_entries*np.mean(np.diff(crate_epoch_usec)))))
-    resampled_crate_epoch = downsampled(crate_epoch_usec, samples_per_newsample)
-    resampled_crate_frame = downsampled(crate_frame, samples_per_newsample)
+    offsets, crate_epoch_usec, crate_frame = monotonicity(ds.filename)
+
+
     mic_epoch_usec = mass.load_mic_file(ds.filename)
     measured_mic_latency = -0.18557235449876053
     mic_frame_adjustment = -measured_mic_latency/ds.timebase
-    mic_frame = extrap(mic_epoch_usec, resampled_crate_epoch, resampled_crate_frame)+mic_frame_adjustment
+    mic_frame = extrap(mic_epoch_usec, crate_epoch_usec, crate_frame)+mic_frame_adjustment
     return mic_frame*ds.timebase
 
 def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot=True):
@@ -205,8 +255,7 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
     band1_med_diff = np.abs(0.5-periodic_median((band1_timestamps[mic_index_band1]-mic_timestamps), pump_freq_hz))
     band2_med_diff = np.abs(0.5-periodic_median((band2_timestamps[mic_index_band2]-mic_timestamps), pump_freq_hz))
     diff_diff = np.abs(band1_med_diff-band2_med_diff)
-    if diff_diff < 0.4:
-        raise ValueError("ambiguous which band is pumped")
+
     if band1_med_diff<band2_med_diff:
     # xrays occuring simultaneous to a microphone trigger should have phase 1 or 0
     # xrays occuring on a laser pulse not simultaneous to a microphone trigger should have phase 0.5
@@ -225,10 +274,20 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
         plt.xlabel("frame time (s)")
         plt.ylabel("x-ray phase difference from nearest microphone timestamps")
         plt.legend()
+    if diff_diff < 0.4:
+        raise ValueError("ambiguous which band is pumped")
     return pumped_band
 
-def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True):
+def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, forceNew=False):
     ds = data.first_good_dataset
-    pumped_band = label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz, doPlot)
+    pre_knowledge = [ds.pumped_band_knowledge for ds in data if ds.pumped_band_knowledge is not None]
+    pumped_band = None
+    if len(pre_knowledge)>0:
+        if all([pre_knowledge[i] == pre_knowledge[0] for i in xrange(len(pre_knowledge))]):
+            pumped_band = pre_knowledge[0]
+    if pumped_band is None or forceNew:
+        pumped_band = label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz, doPlot)
+    else:
+        print("skipping labeling of pumped band, because the band is already labeled")
     for ds in data:
         ds.pumped_band_knowledge=pumped_band

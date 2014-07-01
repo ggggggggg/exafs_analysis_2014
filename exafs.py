@@ -187,7 +187,7 @@ def plot_combined_spectra(data, erange=(0,20000), binsize=5, ref_lines = [], cha
         pulse_timing.choose_laser(data,laser_choice)
         plot_combined_spectrum(data, erange, binsize, ref_lines, chans, laser_choice)
 
-def save_all_plots_as_pdf(data):
+def save_all_plots(data):
     basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
     dir, fname = path.split(basename)
     print("writing %d plots as png to %s"%(len(plt.get_fignums()), dir))
