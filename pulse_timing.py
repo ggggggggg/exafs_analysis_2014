@@ -6,23 +6,33 @@ import exafs
 
 import scipy.signal, scipy.optimize
 
-
-def monotonic_frame_ranges(frames):
-    starts = np.nonzero(np.diff(np.sign(np.diff(frames)))==2)[0]+1
-    ends = np.nonzero(np.diff(np.sign(np.diff(frames)))==-2)[0]+1
-    starts = np.hstack((0,starts))
-    ends = np.hstack((ends,len(frames)))
-    for j in range(len(starts)):
-        entries_in_aux_file = ends[j]-starts[j]
-        if entries_in_aux_file<4:
+def contiguous_regions(condition, minlen =8):
+    """Finds contiguous True regions of the boolean array "condition". Returns
+    a 2D array where the first column is the start index of the region and the
+    second column is the end index."""
+    d = np.diff(condition)
+    idx, = d.nonzero()
+    idx += 1
+    if condition[0]:
+        idx = np.r_[0, idx]
+    if condition[-1]:
+        idx = np.r_[idx, condition.size] # Edit
+    idx.shape = (-1,2)
+    starts, ends = idx[:,0], idx[:,1]
+    for j in range(len(starts))[::-1]:
+        if ends[j]-starts[j]<minlen:
             ends.pop(j)
             starts.pop(j)
+    return starts, ends
+
+def monotonic_frame_ranges(frames, minlen=8):
+    starts, ends = contiguous_regions(np.diff(frames)>0,minlen)
     return starts, ends
 
 
 def monotonicity(ljh_fname):
     crate_epoch_usec, crate_frame = mass.load_aux_file(ljh_fname)
-    starts, ends = monotonic_frame_ranges(np.array(crate_frame, dtype=np.int))
+    starts, ends = monotonic_frame_ranges(np.array(crate_frame, dtype=np.int), minlen=8)
 
     # the ratio of diff(crate_epoch_usec) to diff(crate_frame) appears to follow a pattern  with period 4
     # one sample with a much higher than average ratio, two with typical ratios, one with much lower ratio
@@ -50,13 +60,24 @@ def monotonicity(ljh_fname):
     return offsets, np.hstack(resampled_crate_epoch), np.hstack(new_frame)
 
 
-def apply_offsets_for_monotonicity_dataset(offsets, ds):
+def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False):
     ds_frame = ds.p_timestamp/ds.timebase
-    starts, ends = monotonic_frame_ranges(ds_frame)
-    if not all([s-e==1 for s,e in zip(starts[1:], ends[:-1])]):
-        raise AttributeError("chan %d has timestamps that can't be repair to monotonic"%ds.channum)
+    starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
     if len(starts)>1: # only apply corrections once
-        ds.p_timestamp = np.hstack([ds_frame[starts[j]:ends[j]+1]+offsets[j] for j in xrange(len(ends))])*ds.timebase
+        print starts, ends, ends-starts
+        if len(starts)>len(offsets):
+            starts = sorted(starts[np.argsort(ends-starts)[-len(offsets):]]) # drop the shortest regions
+
+        print starts
+        out = ds.p_timestamp.copy()
+        for j in xrange(len(starts)-1):
+            print(j, len(starts), starts[j], starts[j+1])
+            out[starts[j]:starts[j+1]]+=offsets[j]*ds.timebase
+        print(starts[-1])
+        out[starts[-1]:]+=offsets[-1]*ds.timebase
+    if not test:
+        ds.p_timestamp = out
+    return out
 
 def apply_offsets_for_monotonicity(data):
     offsets, crate_epoch, crate_frame = monotonicity(data.first_good_dataset.filename)
@@ -193,7 +214,10 @@ def calc_laser_phase(data, forceNew=False):
     phase,f0, spline = calc_phase(ds.p_timestamp)
     for ds in data:
         if not hasattr(ds, "p_laser_phase") or forceNew:
+            print("chan %d calculating laser phase"%ds.channum)
             ds.p_laser_phase = spline.phase(ds.p_timestamp)
+        else:
+            print("chan %d skipping calculate laser phase, already done"%ds.channum)
 
 def choose_laser_dataset(ds, band, cut_lines=[0.47,0.515]):
     """
