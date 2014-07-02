@@ -64,20 +64,15 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False):
     ds_frame = ds.p_timestamp/ds.timebase
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
     if len(starts)>1: # only apply corrections once
-        print starts, ends, ends-starts
         if len(starts)>len(offsets):
             starts = sorted(starts[np.argsort(ends-starts)[-len(offsets):]]) # drop the shortest regions
-
-        print starts
         out = ds.p_timestamp.copy()
         for j in xrange(len(starts)-1):
-            print(j, len(starts), starts[j], starts[j+1])
             out[starts[j]:starts[j+1]]+=offsets[j]*ds.timebase
-        print(starts[-1])
         out[starts[-1]:]+=offsets[-1]*ds.timebase
-    if not test:
-        ds.p_timestamp = out
-    return out
+        if not test:
+            ds.p_timestamp = out
+        return out
 
 def apply_offsets_for_monotonicity(data):
     offsets, crate_epoch, crate_frame = monotonicity(data.first_good_dataset.filename)
