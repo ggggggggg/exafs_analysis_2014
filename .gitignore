@@ -8,3 +8,5 @@ exafs.pyc
 timestamp.py
 
 server_log.txt
+
+*.zip

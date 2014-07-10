@@ -154,8 +154,12 @@ def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,10
     else:
         return (timestamp*f0)%num_bands,f0, None
 
-def phase_2band_find(phase, cut_lines=[0.47,0.515]):
-    a,b = np.amin(cut_lines), np.amax(cut_lines)
+def phase_2band_find(phase, cut_lines=[.03,0.02]):
+    bin_e = np.arange(0,1.01,0.01)
+    counts, bin_e =np.histogram(phase%1, bin_e)
+    bin_c = bin_e[1:]-(bin_e[1]-bin_e[0])*0.5
+    maxbin = bin_c[np.argmax(counts)] # find the maximum bin
+    a,b = maxbin-cut_lines[0], maxbin+cut_lines[1] # make cuts on either side of it
     band1 = np.logical_and(a<phase, phase<b)
     band2 = np.logical_and((a+1)<phase, phase<(b+1))
     bandNone = np.logical_not(np.logical_or(band1, band2))
@@ -176,7 +180,7 @@ def periodogram2(timestamp, cut_lines = [0.47,0.515]):
     plt.ylabel("flattened phase/2*pi")
     plt.title("f0=%f"%f0)
 
-def periodogram(timestamp, cut_lines = [0.47,0.515], flatten=True, split=True):
+def periodogram(timestamp, cut_lines=[.03,0.02], flatten=True, split=True):
     num_bands = (2 if split else 1)
     phase,f0,spline = calc_phase(timestamp, flatten=flatten, num_bands = num_bands)
     plt.figure()
@@ -205,8 +209,20 @@ def downsampled(x, samples_per_newsample):
 
 
 def calc_laser_phase(data, forceNew=False):
-    ds = data.first_good_dataset
-    phase,f0, spline = calc_phase(ds.p_timestamp)
+    #try to pick a reasonable dataset to get f0 and the spline from
+    for ds in data:
+        print("looking at chan %d as potential source of phase spline"%ds.channum)
+        try:
+            phase,f0, spline = calc_phase(ds.p_timestamp) # for the purposes of finding f0
+        except:
+            print("chan %d rejected for failing to calculate phase"%ds.channum)
+            continue
+        band1, band2, bandNone = phase_2band_find(phase)
+        if len(band1)/float(ds.nPulses) > 0.2 and len(band2)/float(ds.nPulses)>0.2 and len(bandNone)/float(ds.nPulses) >0.01:
+            break
+        else:
+            print("chan %d rejected for not having a reasonable distribution of pulses in bands"%ds.channum)
+    print("using spline from %d with %d pulses"%(ds.channum, ds.nPulses))
     for ds in data:
         if not hasattr(ds, "p_laser_phase") or forceNew:
             print("chan %d calculating laser phase"%ds.channum)
@@ -214,7 +230,7 @@ def calc_laser_phase(data, forceNew=False):
         else:
             print("chan %d skipping calculate laser phase, already done"%ds.channum)
 
-def choose_laser_dataset(ds, band, cut_lines=[0.47,0.515]):
+def choose_laser_dataset(ds, band, cut_lines=[.03,0.02]):
     """
     uses the dataset.cuts object to mark bad all pulses not in a specific category related
     to laser timing
@@ -247,7 +263,7 @@ def choose_laser_dataset(ds, band, cut_lines=[0.47,0.515]):
     else:
         raise ValueError("%s is not a valid choice for choose_laser_dataset"%band)
 
-def choose_laser(data, band, cut_lines=[0.47,0.515]):
+def choose_laser(data, band, cut_lines=[.03,0.02]):
     print("Choosing otherwise good %s pulses via cuts."%band.upper())
     for ds in data:
         choose_laser_dataset(ds, band, cut_lines)
@@ -298,14 +314,19 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
     return pumped_band
 
 def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, forceNew=False):
-    ds = data.first_good_dataset
     pre_knowledge = [ds.pumped_band_knowledge for ds in data if ds.pumped_band_knowledge is not None]
     pumped_band = None
     if len(pre_knowledge)>0:
         if all([pre_knowledge[i] == pre_knowledge[0] for i in xrange(len(pre_knowledge))]):
             pumped_band = pre_knowledge[0]
     if pumped_band is None or forceNew:
-        pumped_band = label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz, doPlot)
+        for ds in data:
+            try:
+                pumped_band = label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz, doPlot)
+                break
+            except:
+                pass
+        if pumped_band is None: raise ValueError("failed to assign pumped_band with any dataset")
     else:
         print("skipping labeling of pumped band, because the band is already labeled")
     for ds in data:
