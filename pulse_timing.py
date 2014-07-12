@@ -65,19 +65,31 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False):
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
     if len(starts)>1: # only apply corrections once
         if len(starts)>len(offsets):
-            starts = sorted(starts[np.argsort(ends-starts)[-len(offsets):]]) # drop the shortest regions
+            ems = ends-starts
+            starts = sorted(starts[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
+            ends = sorted(ends[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
         out = ds.p_timestamp.copy()
-        for j in xrange(len(starts)-1):
-            out[starts[j]:starts[j+1]]+=offsets[j]*ds.timebase
-        out[starts[-1]:]+=offsets[-1]*ds.timebase
+        for j in xrange(1,len(starts)):
+            out[ends[j-1]+1:ends[j]+1]+=offsets[j]*ds.timebase
         if not test:
             ds.p_timestamp = out
+        else:
+            plt.figure()
+            plt.plot(ds.p_timestamp,'.')
+            for j in xrange(1,len(starts)):
+                plt.plot([ends[j-1], ends[j]], offsets[j]*ds.timebase*np.array([1,1]))
+                plt.plot(out)
+                plt.title(str(ends))
+            print("offsets", offsets)
+            print("starts", starts)
+            print("ends", ends)
         return out
 
-def apply_offsets_for_monotonicity(data):
+
+def apply_offsets_for_monotonicity(data, test=False):
     offsets, crate_epoch, crate_frame = monotonicity(data.first_good_dataset.filename)
     for ds in data:
-        apply_offsets_for_monotonicity_dataset(offsets, ds)
+        apply_offsets_for_monotonicity_dataset(offsets, ds, test)
 
 def find_f0(timestamp, f0_low, f0_high):
     f0_low, f0_high = np.sort([f0_low, f0_high])
