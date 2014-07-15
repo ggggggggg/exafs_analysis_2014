@@ -90,3 +90,27 @@ def phase_2band_find(phase, cut_lines=[.03,0.02]):
     band2 = np.logical_and((a+1)<phase, phase<(b+1))
     bandNone = np.logical_not(np.logical_or(band1, band2))
     return band1, band2, bandNone
+
+def phase_plot(phase, ax):
+    thres = 0.025
+    bin_e = np.arange(0,2.01,0.001)
+    counts, bin_e =np.histogram(phase%1, bin_e)
+    bin_c = bin_e[1:]-(bin_e[1]-bin_e[0])*0.5
+    mean = (counts*bin_c).sum()/float(counts.sum())
+    mean2=np.median(phase%1)
+    ax.plot(mean, np.interp(mean, bin_c, counts),'o')
+    ax.plot(mean, np.interp(mean2, bin_c, counts),'s')
+    ax.plot(mean+thres, np.interp(mean+thres, bin_c, counts),'o')
+    ax.plot(mean2+thres, np.interp(mean2+thres, bin_c, counts),'s')
+    ax.plot(mean-thres, np.interp(mean-thres, bin_c, counts),'o')
+    ax.plot(mean2-thres, np.interp(mean2-thres, bin_c, counts),'s')
+
+    ax.plot(bin_c, counts)
+
+
+pulse_timing.choose_laser(data, "all")
+plt.figure()
+ax = plt.gca()
+for j,ds in enumerate(data):
+    if j>5: break
+    phase_plot(ds.p_laser_phase[ds.cuts.good()], ax)

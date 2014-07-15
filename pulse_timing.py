@@ -175,18 +175,15 @@ def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,10
     else:
         return (timestamp*f0)%num_bands,f0, None
 
-def phase_2band_find(phase, cut_lines=[.03,0.02]):
-    bin_e = np.arange(0,1.01,0.01)
-    counts, bin_e =np.histogram(phase%1, bin_e)
-    bin_c = bin_e[1:]-(bin_e[1]-bin_e[0])*0.5
-    maxbin = bin_c[np.argmax(counts)] # find the maximum bin
-    a,b = maxbin-cut_lines[0], maxbin+cut_lines[1] # make cuts on either side of it
+def phase_2band_find(phase, cut_lines=[0.012,0.012], median=None):
+    if median is None: median = np.median(phase%1)
+    a,b = median-cut_lines[0], median+cut_lines[1] # make cuts on either side of it
     band1 = np.logical_and(a<phase, phase<b)
     band2 = np.logical_and((a+1)<phase, phase<(b+1))
     bandNone = np.logical_not(np.logical_or(band1, band2))
     return band1, band2, bandNone
 
-def periodogram2(timestamp, cut_lines = [0.47,0.515]):
+def periodogram2(timestamp, cut_lines = [0.012,0.012]):
     num_bands = 2
     phase,f0, spline = calc_phase(timestamp)
     band1, band2, bandNone = phase_2band_find(phase, cut_lines)
@@ -195,13 +192,14 @@ def periodogram2(timestamp, cut_lines = [0.47,0.515]):
     plt.plot(timestamp[band1], phase[band1],'.')
     plt.plot(timestamp[band2], phase[band2],'.')
     plt.plot(timestamp[bandNone], phase[bandNone],'.')
+    cut_lines[0]*=-1
     for j in xrange(4):
-        plt.plot([timestamp[0], timestamp[-1]], np.array([1,1])*(cut_lines[j%2]+(1 if j>1 else 0))%num_bands,'k')
+        plt.plot([timestamp[0], timestamp[-1]], (np.median(timestamp%1)+np.array([1,1])*(cut_lines[j%2]+(1 if j>1 else 0)))%num_bands,'k')
     plt.xlabel("time (s)")
     plt.ylabel("flattened phase/2*pi")
     plt.title("f0=%f"%f0)
 
-def periodogram(timestamp, cut_lines=[.03,0.02], flatten=True, split=True):
+def periodogram(timestamp, cut_lines=[0.012,0.012], flatten=True, split=True):
     num_bands = (2 if split else 1)
     phase,f0,spline = calc_phase(timestamp, flatten=flatten, num_bands = num_bands)
     plt.figure()
@@ -251,7 +249,7 @@ def calc_laser_phase(data, forceNew=False):
         else:
             print("chan %d skipping calculate laser phase, already done"%ds.channum)
 
-def choose_laser_dataset(ds, band, cut_lines=[.03,0.02]):
+def choose_laser_dataset(ds, band, cut_lines=[0.012,0.012]):
     """
     uses the dataset.cuts object to mark bad all pulses not in a specific category related
     to laser timing
@@ -262,8 +260,9 @@ def choose_laser_dataset(ds, band, cut_lines=[.03,0.02]):
     """
     band = str(band).lower()
     cutnum = ds.CUT_NAME.index('timing')
-    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines)
     ds.cuts.clearCut(cutnum)
+    median = np.median(ds.p_laser_phase[ds.cuts.good()]%1) # use only "good" pulses for median
+    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines, median=median)
     if band == "pumped":
         if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
         band=str(ds.pumped_band_knowledge)
@@ -281,10 +280,12 @@ def choose_laser_dataset(ds, band, cut_lines=[.03,0.02]):
         ds.cuts.cut(cutnum, np.logical_not(bandNone))
     elif band == "laser":
         ds.cuts.cut(cutnum, bandNone)
+    elif band == 'all':
+        pass
     else:
         raise ValueError("%s is not a valid choice for choose_laser_dataset"%band)
 
-def choose_laser(data, band, cut_lines=[.03,0.02]):
+def choose_laser(data, band, cut_lines=[0.012,0.012]):
     print("Choosing otherwise good %s pulses via cuts."%band.upper())
     for ds in data:
         choose_laser_dataset(ds, band, cut_lines)
