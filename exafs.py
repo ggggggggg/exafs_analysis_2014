@@ -228,3 +228,31 @@ def pulse_summary(data):
     plt.ylabel("# good not_laser")
     plt.xlabel("channel number")
 
+#quality control
+def abs_diff_ratio(a):
+    abs_diff_a = np.abs(a-np.median(a))
+    return abs_diff_a/float(np.median(abs_diff_a))
+
+def quality_control(data, func, name, threshold=10):
+    print("running quality control with %s and threshold = %g"%(name, threshold))
+    fig_of_merit = abs_diff_ratio([func(ds) for ds in data])
+    chans = np.array([ds.channum for ds in data])
+    plt.figure()
+    plt.plot(chans, fig_of_merit,'o')
+    index = fig_of_merit>threshold
+    plt.plot(chans[index], fig_of_merit[index],'ro')
+    plt.xlabel("channel number")
+    plt.ylabel(name+" abs diff ratio")
+    for chan in chans[index]:
+        data.set_chan_bad(chan, "quality_control: %s = %0.2f"%(name, func(data.channel[chan])))
+
+def edge_center_func(ds):
+    return fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)[0]
+
+def chi2_func(ds):
+    return fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)[5]
+
+def undo_quality_control(data):
+    for k in data.why_chan_bad:
+        for s in data.why_chan_bad[k]:
+            if "quality_control" in s: data.set_chan_good(k)
