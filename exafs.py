@@ -64,9 +64,12 @@ def fit_edge_hist(bins, counts, fwhm_guess=10.0):
     try:
         pOut = curve_fit(edge_model, bins, counts, pGuess)
     except:
-        return (0,0,0,0,0)
+        return (0,0,0,0,0,0)
     (edgeCenter, preHeight, postHeight, fwhm, bgSlope) = pOut[0]
-    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope)
+    model_counts = edge_model(bins, edgeCenter, preHeight, postHeight, fwhm, bgSlope)
+    num_degree_of_freedom = float(len(bins)-1-5) # num points - 1 - number of fitted parameters
+    chi2 = np.sum(((counts - model_counts)**2)/model_counts)/num_degree_of_freedom
+    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
 
 def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_guess=10.0, doPlot=False):
     if not edge_name[-4:].lower()=="edge": raise ValueError("%s is not an edge"%edge_name)
@@ -77,7 +80,7 @@ def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_
         bin_centers = bin_edges[:-1]+0.5*(bin_edges[1]-bin_edges[0])
         plt.figure()
         plt.plot(bin_centers, counts)
-    (edgeCenter, preHeight, postHeight, fwhm, bgSlope) = fit_edge_hist(bin_edges, counts, fwhm_guess)
+    (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2) = fit_edge_hist(bin_edges, counts, fwhm_guess)
 
     if doPlot:
         plt.plot(np.linspace(low_energy,high_energy,1000), edge_model(np.linspace(low_energy,high_energy,1000), edgeCenter, preHeight, postHeight, fwhm, bgSlope))
@@ -85,7 +88,7 @@ def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_
         plt.ylabel("counts per %0.2f eV bin"%(bin_edges[1]-bin_edges[0]))
         plt.title("chan %d %s"%(ds.channum, edge_name))
 
-    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope)
+    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
 
 def write_histogram_dataset(ds, fname, erange=(0,20000), binsize=5):
     fname+=".spectrum"
@@ -154,34 +157,54 @@ def fit_edges(data,edge_name , width_ev=400, bin_size_ev=3, fwhm_guess=10.0, doP
     chans = [ds.channum for ds in data]
     if doPlot:
         plt.figure()
-        plt.subplot(411)
+        plt.subplot(511)
         plt.plot(chans,fit_params[:,0],'o',label="edge_center")
         plt.ylabel("edge_center (eV)")
-        plt.subplot(412)
+        plt.subplot(512)
         pre, post = fit_params[:,1], fit_params[:,2]
         delta_mu=np.log(pre/post)
         plt.plot(chans, delta_mu,'o',label="pre height")
         plt.ylabel("delta abs len")
-        plt.subplot(413)
+        plt.subplot(513)
         plt.plot(chans, (pre+post)/2.0,'o')
         plt.ylabel("avg counts")
-        plt.subplot(414)
+        plt.subplot(514)
         plt.plot(chans, fit_params[:,3],'o')
         plt.ylabel("energy resolution")
+        plt.xlabel("channel number")
+        plt.subplot(515)
+        plt.plot(chans, fit_params[:,5],'o')
+        plt.ylabel("chi^2")
         plt.xlabel("channel number")
     return fit_params
 
 # in development
-def calibration_summary(data, calname):
+def calibration_summary(data, calname = "p_filt_value_tdc"):
+    ds1 = data.first_good_dataset
+    cal1 = ds1.calibration[calname]
+    res = np.zeros((data.num_good_channels, len(cal1.elements)))
+    plt.figure()
+    cmap = plt.get_cmap()
+    cmap = [cmap(i/float(len(cal1.elements))) for i in xrange(len(cal1.elements))]
+    for j, feature in enumerate(cal1.elements):
+        for k, ds in enumerate(data):
+            #plt.subplot(np.ceil(np.sqrt(len(cal1.elements))), np.ceil(np.sqrt(len(cal1.elements))), j)
+            res[k, j] = ds.calibration[calname].energy_resolutions[j]
+        plt.hist(res[:,j], np.arange(0,40,1), histtype="step", label=str(feature+" %0.2f"%np.median(res[:,j])),color=cmap[j])
+    plt.xlabel("energy resolution (eV)")
+    plt.ylabel("num channels per bin")
+    plt.legend()
+    plt.grid("on")
+
     elements = [ds.calibration[calname].elements for ds in data]
     energy_resolution = [ds.calibration[calname].energy_resolutions for ds in data]
-    refined_peak_positions = [ds.calibration[calname].refined_peak_positions for ds in data]
 
     energies = [mass.energy_calibration.STANDARD_FEATURES[name] for name in elements[0]]
 
     plt.figure()
     for j in xrange(len(elements)):
         plt.plot(energies, energy_resolution[j],'.')
+    plt.plot(energies, np.median(res, axis=0),'s',markersize=10)
     plt.xlabel("energy (eV)")
     plt.ylabel("fwhm res from calibration (eV)")
     plt.ylim(0,20)

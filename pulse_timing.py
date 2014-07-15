@@ -60,15 +60,17 @@ def monotonicity(ljh_fname):
     return offsets, np.hstack(resampled_crate_epoch), np.hstack(new_frame)
 
 
-def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False):
+def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=False):
     ds_frame = ds.p_timestamp/ds.timebase
+    if not hasattr(ds, "p_timestamp_raw"): ds.p_timestamp_raw = ds.p_timestamp.copy()
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
-    if len(starts)>1: # only apply corrections once
+    if all(ds.p_timestamp_raw==ds.p_timestamp) or forceNew: # only apply corrections once
+        print("channel %d applying offsets for monotonicity"%ds.channum)
         if len(starts)>len(offsets):
             ems = ends-starts
             starts = sorted(starts[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
             ends = sorted(ends[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
-        out = ds.p_timestamp.copy()
+        out = ds.p_timestamp_raw.copy()
         for j in xrange(1,len(starts)):
             out[ends[j-1]+1:ends[j]+1]+=offsets[j]*ds.timebase
         if not test:
@@ -86,10 +88,17 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False):
         return out
 
 
-def apply_offsets_for_monotonicity(data, test=False):
+def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False):
     offsets, crate_epoch, crate_frame = monotonicity(data.first_good_dataset.filename)
+    print("applying time offsets to all datasets", offsets)
     for ds in data:
-        apply_offsets_for_monotonicity_dataset(offsets, ds, test)
+        apply_offsets_for_monotonicity_dataset(offsets, ds, test, forceNew)
+    if doPlot:
+        plt.figure()
+        plt.plot([ds.channum for ds in data], [np.amax(np.diff(ds.p_timestamp)) for ds in data],'.')
+        plt.xlabel("channel number")
+        plt.ylabel("largest jump in p_timestamp")
+
 
 def find_f0(timestamp, f0_low, f0_high):
     f0_low, f0_high = np.sort([f0_low, f0_high])

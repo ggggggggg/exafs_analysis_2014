@@ -33,13 +33,13 @@ pulse_timing.apply_offsets_for_monotonicity(data)
 pulse_timing.calc_laser_phase(data, forceNew=True)
 pulse_timing.choose_laser(data, "not_laser")
 data.drift_correct(forceNew=False)
-data.phase_correct2014(10, plot=False) # doesnt work right now
-data.calibrate('p_filt_value_dc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
-                        size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
-                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
-data.calibrate('p_filt_value_phc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
-                        size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
-                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
+data.phase_correct2014(10, plot=False)
+# data.calibrate('p_filt_value_dc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
+#                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
+#                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
+# data.calibrate('p_filt_value_phc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
+#                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
+#                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
 data.time_drift_correct(forceNew=False)
 data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
@@ -47,14 +47,14 @@ data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha'
 pulse_timing.label_pumped_band_for_alternating_pump(data, forceNew=False)
 data.pickle_datasets()
 
-# write histograms
+# # write histograms
 exafs.plot_combined_spectra(data, ref_lines=["FeKEdge"])
 exafs.plot_combined_spectra(data, erange = (7080, 7200), ref_lines=["FeKEdge"])
 exafs.write_channel_histograms(data, erange=(0,20000), binsize=5)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=5)
 
 
-# diagnostics
+# # diagnostics
 ds = data.first_good_dataset
 pulse_timing.choose_laser(data,"laser")
 exafs.fit_edge_in_energy_dataset(ds, "FeKEdge",doPlot=True)
@@ -67,17 +67,79 @@ exafs.calibration_summary(data, "p_filt_value_tdc")
 exafs.pulse_summary(data)
 data.plot_count_rate()
 
-#save plots
+# save plots
 exafs.save_all_plots(data)
 
 
+pulse_timing.choose_laser(data, "laser")
 
 
-def plot_attr(data, attr):
+def median_abs_diff(a):
+    return np.median(abs_diff(a))
+
+def abs_diff(a):
+    return np.abs(a-np.median(a))
+
+def abs_diff_ratio(a):
+    abs_diff_a = np.abs(a-np.median(a))
+    return abs_diff_a/float(np.median(abs_diff_a))
+
+def quality_control(data, func, name, threshold=10):
+    fig_of_merit = abs_diff_ratio([func(ds) for ds in data])
+    chans = np.array([ds.channum for ds in data])
     plt.figure()
-    for ds in data:
-        plt.plot(getattr(ds, attr),'.')
-    plt.ylabel(attr)
+    plt.plot(chans, fig_of_merit,'o')
+    index = fig_of_merit>threshold
+    plt.plot(chans[index], fig_of_merit[index],'ro')
+    plt.xlabel("channel number")
+    plt.ylabel(name+" abs diff ratio")
+    for chan in chans[index]:
+        data.set_chan_bad(chan, "quality_control: %s = %0.2f"%(name, func(data.channel[chan])))
+
+def edge_center_func(ds):
+    return exafs.fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)[0]
+
+def chi2_func(ds):
+    return exafs.fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)[5]
 
 
-plot_attr(data, "p_timestamp")
+def allgood(data):
+    bad_chan = [chan for chan in data._bad_channums]
+    for chan in bad_chan:
+        data.set_chan_good(chan)
+
+quality_control(data, edge_center_func, "FeKEdge Location")
+quality_control(data, chi2_func, "edge fit chi^2", threshold=8)
+
+# def quality_control(data):
+fit_params = exafs.fit_edges(data, "FeKEdge")
+
+edge_centers = fit_params[:,0]
+abs_diff_ratio_edge_centers = abs_diff_ratio(edge_centers)
+
+plt.figure()
+plt.plot([ds.channum for ds in data], abs_diff_ratio_edge_centers,'o')
+
+
+# def leftover_phc(ds, attr="p_filt_value_phc", feature="CuKAlpha", ax=None):
+#     cal = ds.calibration[attr]
+#     pulse_timing.choose_laser_dataset(ds, "not_laser")
+#     if ax is None:
+#         plt.figure()
+#         ax = plt.gca()
+#     ax.plot(ds.p_promptness[ds.cuts.good()], getattr(ds, attr)[ds.cuts.good()],'.')
+#     # ax.set_xlabel("promptness")
+#     ax.set_ylabel(attr)
+#     ax.set_title("chan %d %s"%(ds.channum, feature))
+#     ax.set_ylim(np.array([.995, 1.005])*cal.name2ph(feature))
+#     index = np.logical_and(getattr(ds, attr)[ds.cuts.good()]>ax.get_ylim()[0], getattr(ds, attr)[ds.cuts.good()]<ax.get_ylim()[1])
+#     xmin = plt.amin(ds.p_promptness[ds.cuts.good()][index])
+#     xmax = plt.amax(ds.p_promptness[ds.cuts.good()][index])
+#     ax.set_xlim(xmin, xmax)
+#
+# plt.figure()
+# for j,ds in enumerate(data):
+#     ax=plt.subplot(5,2,2*j+2)
+#     leftover_phc(ds,ax=ax)
+#     ax2=plt.subplot(5,2,2*j+1)
+#     leftover_phc(ds, "p_filt_value_dc",ax=ax2)
