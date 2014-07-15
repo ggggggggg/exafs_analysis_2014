@@ -6,6 +6,7 @@ from scipy.optimize import curve_fit
 import os
 from os import path
 import pulse_timing
+import shutil
 
 basic_cuts = mass.core.controller.AnalysisControl(
     pulse_average=(0.0, None),
@@ -256,3 +257,73 @@ def undo_quality_control(data):
     for k in data.why_chan_bad:
         for s in data.why_chan_bad[k]:
             if "quality_control" in s: data.set_chan_good(k)
+
+# leftover pulse height correction
+def leftover_phc_single(ds, attr="p_filt_value_phc", feature="CuKAlpha", ax=None):
+    cal = ds.calibration[attr]
+    pulse_timing.choose_laser_dataset(ds, "not_laser")
+    if ax is None:
+        plt.figure()
+        ax = plt.gca()
+    ax.plot(ds.p_promptness[ds.cuts.good()], getattr(ds, attr)[ds.cuts.good()],'.')
+    # ax.set_xlabel("promptness")
+    ax.set_ylabel(attr)
+    ax.set_title("chan %d %s"%(ds.channum, feature))
+    ax.set_ylim(np.array([.995, 1.005])*cal.name2ph(feature))
+    index = np.logical_and(getattr(ds, attr)[ds.cuts.good()]>ax.get_ylim()[0], getattr(ds, attr)[ds.cuts.good()]<ax.get_ylim()[1])
+    xmin = plt.amin(ds.p_promptness[ds.cuts.good()][index])
+    xmax = plt.amax(ds.p_promptness[ds.cuts.good()][index])
+    ax.set_xlim(xmin, xmax)
+
+def leftover_phc(data):
+    plt.figure()
+    for j,ds in enumerate(data):
+        if j ==5: break
+        ax=plt.subplot(5,2,2*j+2)
+        leftover_phc_single(ds,ax=ax)
+        ax2=plt.subplot(5,2,2*j+1)
+        leftover_phc_single(ds, "p_filt_value_dc",ax=ax2)
+
+def calibration_summary_compare(data):
+    ds1 = data.first_good_dataset
+    cals = ds1.calibration.keys()
+    for key in ds1.calibration.keys():
+        if not (hasattr(ds1.calibration[key], "peak_energies") and hasattr(ds1.calibration[key], "energy_resolutions")):
+            cals.remove(key)
+    ress = {}
+    for calname in cals:
+        cal1 = ds1.calibration[calname]
+        res = np.zeros((data.num_good_channels, len(cal1.elements)))
+        plt.figure()
+        cmap = plt.get_cmap()
+        cmap = [cmap(i/float(len(cal1.elements))) for i in xrange(len(cal1.elements))]
+        for j, feature in enumerate(cal1.elements):
+            for k, ds in enumerate(data):
+                #plt.subplot(np.ceil(np.sqrt(len(cal1.elements))), np.ceil(np.sqrt(len(cal1.elements))), j)
+                res[k, j] = ds.calibration[calname].energy_resolutions[j]
+            plt.hist(res[:,j], np.arange(0,40,1), histtype="step", label=str(feature+" %0.2f"%np.median(res[:,j])),color=cmap[j])
+        ress[calname]=res
+        plt.xlabel("energy resolution (eV)")
+        plt.ylabel("num channels per bin")
+        plt.title(calname)
+        plt.legend()
+        plt.grid("on")
+
+    elements = [ds.calibration[calname].elements for ds in data]
+    energy_resolution = [ds.calibration[calname].energy_resolutions for ds in data]
+
+    energies = [mass.energy_calibration.STANDARD_FEATURES[name] for name in elements[0]]
+
+    plt.figure()
+    for calname in cals:
+        plt.plot(energies, np.median(ress[calname], axis=0),'o',markersize=10,label=calname)
+    plt.xlabel("energy (eV)")
+    plt.ylabel("median fwhm res from calibration (eV)")
+    plt.ylim(5,20)
+    plt.grid("on")
+    plt.legend(loc="upper left")
+
+def copy_file_to_mass_output(fname, ljhfname):
+    output_dir = path.dirname(mass.ljh_util.output_basename_from_ljh_fname(ljhfname))
+    print(fname, path.join(output_dir, path.split(fname)[-1]))
+    shutil.copyfile(fname, path.join(output_dir, path.split(fname)[-1]))

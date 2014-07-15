@@ -5,6 +5,7 @@ from os import path
 import os
 import exafs
 import pulse_timing
+import shutil
 import traceback, sys
 
 
@@ -20,6 +21,8 @@ chan_nums = available_chans[:80]
 pulse_files = mass.ljh_chan_names(path.join(dir_base, dir_p), chan_nums)
 noise_files = mass.ljh_chan_names(path.join(dir_base, dir_n), chan_nums)
 data = mass.TESGroup(pulse_files, noise_files, auto_pickle=True)
+exafs.copy_file_to_mass_output(__file__, data.datasets[0].filename) #copy this script to mass_output
+
 
 # analyze data
 data.summarize_data_tdm(peak_time_microsec=220.0, forceNew=False)
@@ -67,41 +70,23 @@ exafs.fit_edges(data,"FeKEdge")
 
 mass.calibration.young.diagnose_calibration(ds.calibration['p_filt_value_tdc'], True)
 ds.compare_calibrations()
+exafs.calibration_summary_compare(data)
 exafs.timestructure_dataset(ds,"p_filt_value_phc")
 exafs.calibration_summary(data, "p_filt_value_tdc")
 exafs.pulse_summary(data)
+exafs.leftover_phc(data)
 data.plot_count_rate()
 
 # save plots
 # exafs.save_all_plots(data)
 
-
-
-
-
-
-def leftover_phc_single(ds, attr="p_filt_value_phc", feature="CuKAlpha", ax=None):
-    cal = ds.calibration[attr]
-    pulse_timing.choose_laser_dataset(ds, "not_laser")
-    if ax is None:
-        plt.figure()
-        ax = plt.gca()
-    ax.plot(ds.p_promptness[ds.cuts.good()], getattr(ds, attr)[ds.cuts.good()],'.')
-    # ax.set_xlabel("promptness")
-    ax.set_ylabel(attr)
-    ax.set_title("chan %d %s"%(ds.channum, feature))
-    ax.set_ylim(np.array([.995, 1.005])*cal.name2ph(feature))
-    index = np.logical_and(getattr(ds, attr)[ds.cuts.good()]>ax.get_ylim()[0], getattr(ds, attr)[ds.cuts.good()]<ax.get_ylim()[1])
-    xmin = plt.amin(ds.p_promptness[ds.cuts.good()][index])
-    xmax = plt.amax(ds.p_promptness[ds.cuts.good()][index])
-    ax.set_xlim(xmin, xmax)
-
-def leftover_phc(data):
-    plt.figure()
-    for j,ds in enumerate(data):
-        if j ==5: break
-        ax=plt.subplot(5,2,2*j+2)
-        leftover_phc(ds,ax=ax)
-        ax2=plt.subplot(5,2,2*j+1)
-        leftover_phc(ds, "p_filt_value_dc",ax=ax2)
-
+def phase_2band_find(phase, cut_lines=[.03,0.02]):
+    bin_e = np.arange(0,1.01,0.01)
+    counts, bin_e =np.histogram(phase%1, bin_e)
+    bin_c = bin_e[1:]-(bin_e[1]-bin_e[0])*0.5
+    maxbin = bin_c[np.argmax(counts)] # find the maximum bin
+    a,b = maxbin-cut_lines[0], maxbin+cut_lines[1] # make cuts on either side of it
+    band1 = np.logical_and(a<phase, phase<b)
+    band2 = np.logical_and((a+1)<phase, phase<(b+1))
+    bandNone = np.logical_not(np.logical_or(band1, band2))
+    return band1, band2, bandNone
