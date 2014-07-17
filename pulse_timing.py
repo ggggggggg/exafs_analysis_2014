@@ -102,19 +102,18 @@ def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False
 
 def find_f0(timestamp, f0_low, f0_high):
     f0_low, f0_high = np.sort([f0_low, f0_high])
-    for j in xrange(5):
-        freqs, psd = ls_psd(timestamp, f0_low, f0_high-f0_low)
+    trange = np.array([1,10, np.inf, np.inf])*3600
+    for j in xrange(4):
+        freqs, psd = ls_psd(timestamp[timestamp-timestamp[0]<trange[j]], f0_low, f0_high-f0_low)
         fstep = freqs[1]-freqs[0]
-        f0_low = f0_low + freqs[np.argmax(psd)]-fstep
-        f0_high = f0_low + 2*fstep
-        #print(f0_low, f0_high)
-    return f0_low+fstep
+        f0_center_mixed = freqs[np.argmax(psd)]
+        f0_low_mixed, f0_high_mixed = 5*fstep*np.array([-1,1])+f0_center_mixed
+        f0_low, f0_high = f0_low+f0_low_mixed, f0_low+f0_high_mixed
+    return 0.5*(f0_low+f0_high)
 
 def ls_psd(timestamp, f0_guess, f0_guess_quality=1):
-    timestamp = timestamp.copy()
-    timestamp -= timestamp[0]
     timestamp_times_f0 = (timestamp-timestamp[0])*f0_guess
-    freqs = np.linspace(f0_guess_quality/100.0, f0_guess_quality,50)
+    freqs = np.linspace(f0_guess_quality/200.0, f0_guess_quality,200)
     psd = lombscarg(timestamp, timestamp_times_f0, freqs)
     return freqs, psd
 

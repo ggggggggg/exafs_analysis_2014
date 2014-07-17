@@ -327,3 +327,4 @@ def copy_file_to_mass_output(fname, ljhfname):
     output_dir = path.dirname(mass.ljh_util.output_basename_from_ljh_fname(ljhfname))
     print(fname, path.join(output_dir, path.split(fname)[-1]))
     shutil.copyfile(fname, path.join(output_dir, path.split(fname)[-1]))
+    print "copying %s to %s"%(fname, path.join(output_dir, path.split(fname)[-1]))
