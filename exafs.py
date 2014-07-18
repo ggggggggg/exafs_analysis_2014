@@ -128,21 +128,27 @@ def combined_energies_hist(data, erange=(0,20000), binsize=5, chans=None):
         counts += c
     return counts, bin_centers
 
-def plot_combined_spectrum(data, erange=(0,20000), binsize=5, ref_lines = [], chans=None, label=""):
+def plot_combined_spectrum(data,ax, erange=(0,20000), binsize=5, ref_lines = [], chans=None, label=""):
     counts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
-    plt.figure()
-    plt.plot(bin_centers, counts)
-    plt.xlabel('energy (eV)')
-    plt.ylabel('counts per %.2f eV bin'%(bin_centers[1]-bin_centers[0]))
+    ax.plot(bin_centers, counts,'.-',label=label)
+    ax.set_xlim(erange)
+    ax.grid("on")
+    ax.set_xlabel('energy (eV)')
+    ax.set_ylabel('counts per %.2f eV bin'%(bin_centers[1]-bin_centers[0]))
     nchans = (len(chans) if chans is not None else data.num_good_channels)
-    plt.title('coadded %s spectrum %d pixel'%(label.upper(), nchans))
+    ax.set_title('coadded %s spectrum %d pixel'%(label.upper(), nchans))
     for line in ref_lines:
         plt.plot(np.array([1, 1])*mass.calibration.energy_calibration.STANDARD_FEATURES[line], plt.ylim())
 
 def plot_combined_spectra(data, erange=(0,20000), binsize=5, ref_lines = [], chans=None):
     for laser_choice in ["laser", "not_laser","pumped", "unpumped"]:
         pulse_timing.choose_laser(data,laser_choice)
-        plot_combined_spectrum(data, erange, binsize, ref_lines, chans, laser_choice)
+        if laser_choice != "unpumped": plt.figure()
+        ax = plt.gca()
+        plot_combined_spectrum(data,ax, erange, binsize, ref_lines, chans, laser_choice)
+        if laser_choice == "unpumped":
+            ax.set_title("coadded PUMPED AND UNPUMPED %d pixel"%data.num_good_channels)
+            plt.legend()
 
 def save_all_plots(data):
     basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)

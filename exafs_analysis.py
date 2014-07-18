@@ -17,7 +17,7 @@ dir_n = "20140716_ferrioxalate_pump_probe_noise/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
 if len(available_chans)==0: raise ValueError("no channels have both noise and pulse data")
-chan_nums = available_chans[:4]
+chan_nums = available_chans[:]
 pulse_files = mass.ljh_chan_names(path.join(dir_base, dir_p), chan_nums)
 noise_files = mass.ljh_chan_names(path.join(dir_base, dir_n), chan_nums)
 data = mass.TESGroup(pulse_files, noise_files, auto_pickle=True)
@@ -57,7 +57,7 @@ exafs.quality_control(data, exafs.chi2_func, "edge fit chi^2", threshold=8)
 
 # # write histograms
 exafs.plot_combined_spectra(data, ref_lines=["FeKEdge"])
-exafs.plot_combined_spectra(data, erange = (7080, 7200), ref_lines=["FeKEdge"])
+exafs.plot_combined_spectra(data, erange = (7080, 7300), ref_lines=["FeKEdge"])
 exafs.write_channel_histograms(data, erange=(0,20000), binsize=5)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=5)
 

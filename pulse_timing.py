@@ -325,12 +325,14 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
         if pumped_band==2: a,b=b,a
         plt.figure()
         #plt.plot(mic_timestamps,'.')
-        plt.plot(band1_timestamps[mic_index_band1],(pump_freq_hz*(band1_timestamps[mic_index_band1]-mic_timestamps))%1,'.',label="band1 %s"%a)
-        plt.plot(band2_timestamps[mic_index_band2],(pump_freq_hz*(band2_timestamps[mic_index_band2]-mic_timestamps))%1,'.',label="band2 %s"%b)
+        mic_index_band1_abridged = mic_index_band1[np.array(np.linspace(0,len(mic_index_band1),10000), dtype="int")]
+        mic_index_band2_abridged = mic_index_band1[np.array(np.linspace(0,len(mic_index_band2),10000), dtype="int")]
+        plt.plot(band1_timestamps[mic_index_band1_abridged],(pump_freq_hz*(band1_timestamps[mic_index_band1_abridged]-mic_timestamps))%1,'.',label="band1 %s"%a)
+        plt.plot(band2_timestamps[mic_index_band2_abridged],(pump_freq_hz*(band2_timestamps[mic_index_band2_abridged]-mic_timestamps))%1,'.',label="band2 %s"%b)
         plt.xlabel("frame time (s)")
         plt.ylabel("x-ray phase difference from nearest microphone timestamps")
         plt.legend()
-    if diff_diff < 0.4:
+    if diff_diff < 0.2:
         raise ValueError("ambiguous which band is pumped")
     return pumped_band
 
