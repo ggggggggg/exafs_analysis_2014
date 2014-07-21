@@ -11,8 +11,8 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140716_ferrioxalate_pump_probe/"
-dir_n = "20140716_ferrioxalate_pump_probe_noise/"
+dir_p = "20140718_ferrioxalate_pump_probe/"
+dir_n = "20140718_ferrioxalate_pump_probe_noise/"
 # dir_p = "20140617_laser_plus_calibronium_timing/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
