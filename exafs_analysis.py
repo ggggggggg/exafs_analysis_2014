@@ -11,8 +11,8 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140718_ferrioxalate_pump_probe/"
-dir_n = "20140718_ferrioxalate_pump_probe_noise/"
+dir_p = "20140720_ferrioxalate_pump_probe/"
+dir_n = "20140720_ferrioxalate_pump_probe_noise/"
 # dir_p = "20140617_laser_plus_calibronium_timing/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
@@ -27,7 +27,7 @@ exafs.copy_file_to_mass_output(__file__, data.datasets[0].filename) #copy this s
 # analyze data
 data.summarize_data_tdm(peak_time_microsec=220.0, forceNew=False)
 data.compute_noise_spectra()
-data.apply_cuts(exafs.basic_cuts, forceNew=False) # forceNew is True by default for apply_cuts, unlike most else
+data.apply_cuts(exafs.basic_cuts, forceNew=True) # forceNew is True by default for apply_cuts, unlike most else
 data.avg_pulses_auto_masks() # creates masks and compute average pulses
 data.plot_average_pulses(-1)
 data.compute_filters(f_3db=10000.0)
@@ -60,6 +60,8 @@ exafs.plot_combined_spectra(data, ref_lines=["FeKEdge"])
 exafs.plot_combined_spectra(data, erange = (7080, 7300), ref_lines=["FeKEdge"])
 exafs.write_channel_histograms(data, erange=(0,20000), binsize=5)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=5)
+exafs.plot_sqrt_spectra(data)
+exafs.plot_sqrt_spectra(data, erange = (7080, 7300))
 
 
 # # diagnostics
@@ -79,4 +81,9 @@ data.plot_count_rate()
 
 # save plots
 exafs.save_all_plots(data)
+
+
+
+
+
 

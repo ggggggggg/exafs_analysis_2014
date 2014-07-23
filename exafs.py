@@ -13,7 +13,7 @@ basic_cuts = mass.core.controller.AnalysisControl(
     pretrigger_rms=(None, 30.0),
     pretrigger_mean_departure_from_median=(-40.0, 40.0),
     peak_value=(0.0, None),
-    max_posttrig_deriv=(None, 200.0),
+    max_posttrig_deriv=(None, 250.0),
     rise_time_ms=(None, 0.6),
     peak_time_ms=(None, 0.8))
 
@@ -55,7 +55,7 @@ def fit_edge_hist(bins, counts, fwhm_guess=10.0):
     except:
         raise ValueError("failed to generate guesses")
     use = bins>(edgeGuess+2*fwhm_guess)
-    if len(use)>4:
+    if np.sum(use)>4:
         pfit2 = np.polyfit(bins[use], counts[use],1)
         slope_guess = pfit2[0]
     else:
@@ -334,3 +334,17 @@ def copy_file_to_mass_output(fname, ljhfname):
     print(fname, path.join(output_dir, path.split(fname)[-1]))
     shutil.copyfile(fname, path.join(output_dir, path.split(fname)[-1]))
     print "copying %s to %s"%(fname, path.join(output_dir, path.split(fname)[-1]))
+
+def plot_sqrt_spectra(data, erange=(0,20000), binsize=5, ref_lines = [], chans=None):
+    pulse_timing.choose_laser(data,"pumped")
+    pcounts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
+    pulse_timing.choose_laser(data,"unpumped")
+    ucounts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
+    plt.figure()
+    ax = plt.gca()
+    ax.plot(bin_centers, (ucounts-pcounts)/np.sqrt(0.5*ucounts+0.5*pcounts),'o')
+    ax.set_xlim(erange)
+    ax.grid("on")
+    ax.set_xlabel('energy (eV)')
+    ax.set_ylabel('(u-p)/sqrt(u/2+p/2) per %.2f eV bin'%(bin_centers[1]-bin_centers[0]))
+    ax.set_title("coadded PUMPED AND UNPUMPED %d pixel"%data.num_good_channels)
