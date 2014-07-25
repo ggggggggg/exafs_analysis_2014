@@ -311,7 +311,7 @@ def mic_triggers_as_timestamps(ds):
 
 def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot=True):
     mic_timestamps = mic_triggers_as_timestamps(ds)
-    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase)
+    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase[:])
     band1_timestamps = ds.p_timestamp[:][band1]
     band2_timestamps = ds.p_timestamp[:][band2]
     #cut out mic_timestamps that come before or after ds timestamps
@@ -346,7 +346,8 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
     return pumped_band
 
 def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, forceNew=False):
-    pre_knowledge = [ds.pumped_band_knowledge for ds in data if ds.pumped_band_knowledge is not None]
+    print("starting label_pumped_band_for_alternating_pump")
+    pre_knowledge = [ds.hdf5_group["pumped_band_knowledge"] for ds in data if "pumped_band_knowledge" in ds.hdf5_group]
     pumped_band = None
     if len(pre_knowledge)>0:
         if all([pre_knowledge[i] == pre_knowledge[0] for i in xrange(len(pre_knowledge))]):
@@ -362,4 +363,4 @@ def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, 
     else:
         print("skipping labeling of pumped band, because the band is already labeled")
     for ds in data:
-        ds.pumped_band_knowledge=pumped_band
+        if "pumped_band_knowledge" in ds.hdf5_group: ds.hdf5_group["pumped_band_knowledge"]=pumped_band
