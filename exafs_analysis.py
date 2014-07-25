@@ -11,29 +11,29 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140720_ferrioxalate_pump_probe/"
-dir_n = "20140720_ferrioxalate_pump_probe_noise/"
+dir_p = "20140724_ferrioxalate_pump_probe_100um_circ_2/"
+dir_n = "20140724_ferrioxalate_pump_probe_100um_circ_noise/"
 # dir_p = "20140617_laser_plus_calibronium_timing/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
 if len(available_chans)==0: raise ValueError("no channels have both noise and pulse data")
-chan_nums = available_chans[:]
+chan_nums = available_chans[:4]
 pulse_files = mass.ljh_chan_names(path.join(dir_base, dir_p), chan_nums)
 noise_files = mass.ljh_chan_names(path.join(dir_base, dir_n), chan_nums)
-data = mass.TESGroup(pulse_files, noise_files, auto_pickle=True)
-exafs.copy_file_to_mass_output(__file__, data.datasets[0].filename) #copy this script to mass_output
+data = mass.TESGroup(pulse_files, noise_files)
+# exafs.copy_file_to_mass_output(__file__, data.datasets[0].filename) #copy this script to mass_output
 
 
 # analyze data
-data.summarize_data_tdm(peak_time_microsec=220.0, forceNew=False)
+data.summarize_data(peak_time_microsec=220.0, forceNew=False)
 data.compute_noise_spectra()
 data.apply_cuts(exafs.basic_cuts, forceNew=True) # forceNew is True by default for apply_cuts, unlike most else
 data.avg_pulses_auto_masks() # creates masks and compute average pulses
 data.plot_average_pulses(-1)
 data.compute_filters(f_3db=10000.0)
-data.filter_data_tdm(forceNew=False)
+data.filter_data(forceNew=False)
 pulse_timing.apply_offsets_for_monotonicity(data)
-pulse_timing.calc_laser_phase(data, forceNew=True)
+pulse_timing.calc_laser_phase(data, forceNew=False)
 pulse_timing.choose_laser(data, "not_laser")
 data.drift_correct(forceNew=False)
 data.phase_correct2014(10, plot=False)
@@ -48,7 +48,6 @@ data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha'
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
 pulse_timing.label_pumped_band_for_alternating_pump(data, forceNew=False)
-data.pickle_datasets()
 
 # do some quality control on the data
 pulse_timing.choose_laser(data, "laser")

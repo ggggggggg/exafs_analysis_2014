@@ -61,23 +61,26 @@ def monotonicity(ljh_fname):
 
 
 def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=False):
-    ds_frame = ds.p_timestamp/ds.timebase
-    if not hasattr(ds, "p_timestamp_raw"): ds.p_timestamp_raw = ds.p_timestamp.copy()
+    ds_frame = ds.p_timestamp[:]/ds.timebase
+    if not "p_timestamp_raw" in ds.hdf5_group:
+        ds.p_timestamp_raw = ds.hdf5_group.create_dataset("p_timestamp_raw", data=ds.p_timestamp)
+    else:
+        ds.p_timestamp_raw = ds.hdf5_group["p_timestamp_raw"]
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
-    if all(ds.p_timestamp_raw==ds.p_timestamp) or forceNew: # only apply corrections once
+    if all(ds.p_timestamp_raw[:]==ds.p_timestamp[:]) or forceNew: # only apply corrections once
         print("channel %d applying offsets for monotonicity"%ds.channum)
         if len(starts)>len(offsets):
             ems = ends-starts
             starts = sorted(starts[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
             ends = sorted(ends[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
-        out = ds.p_timestamp_raw.copy()
+        out = ds.p_timestamp_raw[:]
         for j in xrange(1,len(starts)):
             out[ends[j-1]+1:ends[j]+1]+=offsets[j]*ds.timebase
         if not test:
-            ds.p_timestamp = out
+            ds.p_timestamp[:] = out
         else:
             plt.figure()
-            plt.plot(ds.p_timestamp,'.')
+            plt.plot(ds.p_timestamp[:],'.')
             for j in xrange(1,len(starts)):
                 plt.plot([ends[j-1], ends[j]], offsets[j]*ds.timebase*np.array([1,1]))
                 plt.plot(out)
@@ -95,7 +98,7 @@ def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False
         apply_offsets_for_monotonicity_dataset(offsets, ds, test, forceNew)
     if doPlot:
         plt.figure()
-        plt.plot([ds.channum for ds in data], [np.amax(np.diff(ds.p_timestamp)) for ds in data],'.')
+        plt.plot([ds.channum for ds in data], [np.amax(np.diff(ds.p_timestamp[:])) for ds in data],'.')
         plt.xlabel("channel number")
         plt.ylabel("largest jump in p_timestamp")
 
@@ -211,7 +214,7 @@ def periodogram(timestamp, cut_lines=[0.012,0.012], flatten=True, split=True):
     plt.title("f0=%f"%f0)
 
 def dataset_periodogram2(ds):
-    periodogram2(ds.p_timestamp)
+    periodogram2(ds.p_timestamp[:])
 
 def extrap(x, xp, yp):
     """np.interp function with linear extrapolation"""
@@ -229,22 +232,29 @@ def downsampled(x, samples_per_newsample):
 def calc_laser_phase(data, forceNew=False):
     #try to pick a reasonable dataset to get f0 and the spline from
     for ds in data:
-        print("looking at chan %d as potential source of phase spline"%ds.channum)
-        try:
-            phase,f0, spline = calc_phase(ds.p_timestamp) # for the purposes of finding f0
-        except:
-            print("chan %d rejected for failing to calculate phase"%ds.channum)
-            continue
-        band1, band2, bandNone = phase_2band_find(phase)
-        if len(band1)/float(ds.nPulses) > 0.2 and len(band2)/float(ds.nPulses)>0.2 and len(bandNone)/float(ds.nPulses) >0.01:
-            break
-        else:
-            print("chan %d rejected for not having a reasonable distribution of pulses in bands"%ds.channum)
+        if "p_laser_phase" in ds.hdf5_group:
+            ds.p_laser_phase = ds.hdf5_group["p_laser_phase"]
+    if forceNew or any([not hasattr(ds, "p_laser_phase") for ds in data]):
+        for ds in data:
+            print("looking at chan %d as potential source of phase spline"%ds.channum)
+            try:
+                phase,f0, spline = calc_phase(ds.p_timestamp[:]) # for the purposes of finding f0
+            except:
+                print("chan %d rejected for failing to calculate phase"%ds.channum)
+                continue
+            band1, band2, bandNone = phase_2band_find(phase)
+            if len(band1)/float(ds.nPulses) > 0.2 and len(band2)/float(ds.nPulses)>0.2 and len(bandNone)/float(ds.nPulses) >0.01:
+                break
+            else:
+                print("chan %d rejected for not having a reasonable distribution of pulses in bands"%ds.channum)
+    else:
+        print("skipping all of calc_laser_phase, all already done")
+        return
     print("using spline from %d with %d pulses"%(ds.channum, ds.nPulses))
     for ds in data:
         if not hasattr(ds, "p_laser_phase") or forceNew:
             print("chan %d calculating laser phase"%ds.channum)
-            ds.p_laser_phase = spline.phase(ds.p_timestamp)
+            ds.p_laser_phase = ds.hdf5_group.create_dataset("p_laser_phase", data=spline.phase(ds.p_timestamp[:]))
         else:
             print("chan %d skipping calculate laser phase, already done"%ds.channum)
 
@@ -302,10 +312,10 @@ def mic_triggers_as_timestamps(ds):
 def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot=True):
     mic_timestamps = mic_triggers_as_timestamps(ds)
     band1, band2, bandNone = phase_2band_find(ds.p_laser_phase)
-    band1_timestamps = ds.p_timestamp[band1]
-    band2_timestamps = ds.p_timestamp[band2]
+    band1_timestamps = ds.p_timestamp[:][band1]
+    band2_timestamps = ds.p_timestamp[:][band2]
     #cut out mic_timestamps that come before or after ds timestamps
-    mic_timestamps = mic_timestamps[np.logical_and(mic_timestamps>ds.p_timestamp[1], mic_timestamps<min(band1_timestamps[-1], band2_timestamps[-1]))]
+    mic_timestamps = mic_timestamps[np.logical_and(mic_timestamps>ds.p_timestamp[:][1], mic_timestamps<min(band1_timestamps[-1], band2_timestamps[-1]))]
     mic_index_band1 = np.searchsorted(band1_timestamps, mic_timestamps)
     mic_index_band2 = np.searchsorted(band2_timestamps, mic_timestamps)
     band1_med_diff = np.abs(0.5-periodic_median((band1_timestamps[mic_index_band1]-mic_timestamps), pump_freq_hz))

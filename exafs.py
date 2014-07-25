@@ -13,7 +13,7 @@ basic_cuts = mass.core.controller.AnalysisControl(
     pretrigger_rms=(None, 30.0),
     pretrigger_mean_departure_from_median=(-40.0, 40.0),
     peak_value=(0.0, None),
-    max_posttrig_deriv=(None, 250.0),
+    postpeak_deriv=(None, 250.0),
     rise_time_ms=(None, 0.6),
     peak_time_ms=(None, 0.8))
 
