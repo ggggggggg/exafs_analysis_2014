@@ -273,12 +273,12 @@ def choose_laser_dataset(ds, band, cut_lines=[0.012,0.012]):
     median = np.median(ds.p_laser_phase[ds.cuts.good()]%1) # use only "good" pulses for median
     band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines, median=median)
 
+    if not "pumped_band_knowledge" in ds.hdf5_group: raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+    pumped_band_knowledge = ds.hdf5_group["pumped_band_knowledge"].value
     if band == "pumped":
-        if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-        band=str(ds.pumped_band_knowledge)
+        band=str(pumped_band_knowledge)
     if band == 'unpumped':
-        if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-        if ds.pumped_band_knowledge==1:
+        if pumped_band_knowledge==1:
             band='2'
         else:
             band ='1'
@@ -348,7 +348,7 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
 
 def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, forceNew=False):
     print("starting label_pumped_band_for_alternating_pump")
-    pre_knowledge = [ds.hdf5_group["pumped_band_knowledge"] for ds in data if "pumped_band_knowledge" in ds.hdf5_group]
+    pre_knowledge = [ds.hdf5_group["pumped_band_knowledge"].value for ds in data if "pumped_band_knowledge" in ds.hdf5_group]
     pumped_band = None
     if len(pre_knowledge)>0:
         if all([pre_knowledge[i] == pre_knowledge[0] for i in xrange(len(pre_knowledge))]):

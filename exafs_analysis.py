@@ -17,7 +17,7 @@ dir_n = "20140724_ferrioxalate_pump_probe_100um_circ_noise/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
 if len(available_chans)==0: raise ValueError("no channels have both noise and pulse data")
-chan_nums = available_chans[:4]
+chan_nums = available_chans[:]
 pulse_files = mass.ljh_chan_names(path.join(dir_base, dir_p), chan_nums)
 noise_files = mass.ljh_chan_names(path.join(dir_base, dir_n), chan_nums)
 data = mass.TESGroup(pulse_files, noise_files)
@@ -43,7 +43,7 @@ data.calibrate('p_filt_value_dc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha',
 data.calibrate('p_filt_value_phc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
-data.time_drift_correct(forceNew=True)
+data.time_drift_correct(forceNew=False)
 data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
