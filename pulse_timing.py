@@ -62,12 +62,9 @@ def monotonicity(ljh_fname):
 
 def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=False):
     ds_frame = ds.p_timestamp[:]/ds.timebase
-    if not "p_timestamp_raw" in ds.hdf5_group:
-        ds.p_timestamp_raw = ds.hdf5_group.create_dataset("p_timestamp_raw", data=ds.p_timestamp)
-    else:
-        ds.p_timestamp_raw = ds.hdf5_group["p_timestamp_raw"]
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
-    if all(ds.p_timestamp_raw[:]==ds.p_timestamp[:]) or forceNew: # only apply corrections once
+    if not "p_timestamp_raw" in ds.hdf5_group or forceNew: # only apply corrections once
+        ds.p_timestamp_raw = ds.hdf5_group.create_dataset("p_timestamp_raw", data=ds.p_timestamp)
         print("channel %d applying offsets for monotonicity"%ds.channum)
         if len(starts)>len(offsets):
             ems = ends-starts
@@ -89,6 +86,8 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=Fal
             print("starts", starts)
             print("ends", ends)
         return out
+    else:
+        ds.p_timestamp_raw = ds.hdf5_group["p_timestamp_raw"]
 
 
 def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False):

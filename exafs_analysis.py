@@ -82,7 +82,18 @@ data.plot_count_rate()
 exafs.save_all_plots(data)
 
 
+def plot_spectra_error_bars(data, erange=(0,20000), binsize=5, ref_lines = [], chans=None):
+    pulse_timing.choose_laser(data,"pumped")
+    pcounts, bin_centers = exafs.combined_energies_hist(data, erange, binsize, chans)
+    pulse_timing.choose_laser(data,"unpumped")
+    ucounts, bin_centers = exafs.combined_energies_hist(data, erange, binsize, chans)
+    plt.figure()
+    ax = plt.gca()
+    ax.errorbar(bin_centers, ucounts,fmt='-b', yerr=np.sqrt(ucounts), label="UNPUMPED")
+    ax.errorbar(bin_centers, pcounts,fmt='-r', yerr=np.sqrt(pcounts), label="PUMPED")
+    ax.set_xlabel("energy (eV)")
+    ax.set_ylabel("counts/%0.2f eV bin"%(bin_centers[1]-bin_centers[0]))
+    ax.set_title("error bars are +/- sqrt(counts)")
 
-
-
+plot_spectra_error_bars(data, erange = (7080, 7300))
 
