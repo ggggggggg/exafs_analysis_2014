@@ -11,8 +11,8 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140724_ferrioxalate_pump_probe_100um_circ_2/"
-dir_n = "20140724_ferrioxalate_pump_probe_100um_circ_noise/"
+dir_p = "201400801_ferrioxalate_pump_probe_2/"
+dir_n = "201400801_ferrioxalate_pump_probe_noise/"
 # dir_p = "20140617_laser_plus_calibronium_timing/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
@@ -61,6 +61,8 @@ exafs.write_channel_histograms(data, erange=(0,20000), binsize=5)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=5)
 exafs.plot_sqrt_spectra(data)
 exafs.plot_sqrt_spectra(data, erange = (7080, 7300))
+exafs.plot_sqrt_spectra(data, erange = (6500, 7500))
+
 
 
 # # diagnostics
@@ -91,6 +93,7 @@ def plot_spectra_error_bars(data, erange=(0,20000), binsize=5, ref_lines = [], c
     ax = plt.gca()
     ax.errorbar(bin_centers, ucounts,fmt='-b', yerr=np.sqrt(ucounts), label="UNPUMPED")
     ax.errorbar(bin_centers, pcounts,fmt='-r', yerr=np.sqrt(pcounts), label="PUMPED")
+    ax.legend()
     ax.set_xlabel("energy (eV)")
     ax.set_ylabel("counts/%0.2f eV bin"%(bin_centers[1]-bin_centers[0]))
     ax.set_title("error bars are +/- sqrt(counts)")

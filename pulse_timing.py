@@ -140,9 +140,12 @@ def sampled_phase(timestamp, f0, sample_time_s = 60):
     t_sample = np.arange(timestamp[0], timestamp[-1], sample_time_s)
     i_sample = np.searchsorted(timestamp, t_sample)
     p = np.zeros(len(t_sample)-1, dtype=np.float64)
+    t = np.zeros(len(t_sample)-1, dtype=np.float64)
     for j in xrange(len(i_sample)-1):
-        p[j] = periodic_median(timestamp[i_sample[j]:i_sample[j+1]],f0)
-    return t_sample[:-1]+0.5*sample_time_s, p
+        if i_sample[j+1] - i_sample[j] > 300:
+            p[j] = periodic_median(timestamp[i_sample[j]:i_sample[j+1]],f0)
+            t[j] = t_sample[j]
+    return t[t!=0]+0.5*sample_time_s, p[t!=0]
 
 def splined_phase(timestamp, f0, sample_time_s=60):
     t_sample, phase = sampled_phase(timestamp, f0, sample_time_s)
@@ -272,8 +275,9 @@ def choose_laser_dataset(ds, band, cut_lines=[0.012,0.012]):
     median = np.median(ds.p_laser_phase[ds.cuts.good()]%1) # use only "good" pulses for median
     band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines, median=median)
 
-    if not "pumped_band_knowledge" in ds.hdf5_group: raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-    pumped_band_knowledge = ds.hdf5_group["pumped_band_knowledge"].value
+    if band == "pumped" or band == "unpumped":
+        if not "pumped_band_knowledge" in ds.hdf5_group: raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+        pumped_band_knowledge = ds.hdf5_group["pumped_band_knowledge"].value
     if band == "pumped":
         band=str(pumped_band_knowledge)
     if band == 'unpumped':
