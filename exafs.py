@@ -91,6 +91,22 @@ def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_
 
     return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
 
+def fit_edge_in_energy_combined(data, edge_name, width_ev=300, bin_size_ev=3, fwhm_guess=10.0, doPlot=False, chans=None):
+    low_energy, high_energy = mass.energy_calibration.STANDARD_FEATURES[edge_name] +  np.array([-0.5, 0.5])*width_ev
+    counts, bin_centers = combined_energies_hist(data, (low_energy, high_energy), bin_size_ev, chans)
+    (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2) = fit_edge_hist(bin_centers, counts, fwhm_guess)
+    delta_abs_len = np.log(preHeight/postHeight)
+    if doPlot:
+        plt.figure()
+        plt.plot(bin_centers, counts)
+        plt.plot(np.linspace(low_energy,high_energy,1000), edge_model(np.linspace(low_energy,high_energy,1000), edgeCenter, preHeight, postHeight, fwhm, bgSlope))
+        plt.xlabel("energy (eV), delta_abs_len %0.3f"%delta_abs_len)
+        plt.ylabel("counts per %0.2f eV bin"%(bin_centers[1]-bin_centers[0]))
+        plt.title("all channels %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f"%(edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2))
+    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
+
+
+
 def write_histogram_dataset(ds, fname, erange=(0,20000), binsize=5):
     fname+=".spectrum"
     bin_edge = np.arange(binsize*0.5+erange[0], erange[1]+binsize*0.5, binsize)
@@ -162,6 +178,7 @@ def save_all_plots(data):
 def fit_edges(data,edge_name , width_ev=400, bin_size_ev=3, fwhm_guess=10.0, doPlot=True):
     fit_params = np.array([fit_edge_in_energy_dataset(ds, edge_name, width_ev, bin_size_ev, fwhm_guess) for ds in data])
     chans = [ds.channum for ds in data]
+
     if doPlot:
         plt.figure()
         plt.subplot(511)
