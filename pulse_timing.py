@@ -180,7 +180,7 @@ def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,10
         return (timestamp*f0)%num_bands,f0, None
 
 def phase_2band_find(phase, cut_lines=[0.012,0.012], median=None):
-    if median is None: median = np.median(phase[0:np.amin(50000, len(phase))]%1)
+    if median is None: median = np.median(phase[0:min(50000, len(phase))]%1)
     a,b = median-cut_lines[0], median+cut_lines[1] # make cuts on either side of it
     band1 = np.logical_and(a<phase, phase<b)
     band2 = np.logical_and((a+1)<phase, phase<(b+1))
@@ -253,8 +253,8 @@ def calc_laser_phase(data, forceNew=False):
         print("skipping all of calc_laser_phase, all already done")
         return
     print("using spline from %d with %d pulses"%(ds.channum, ds.nPulses))
-    for ds in data:
-        if not hasattr(ds, "p_laser_phase") or forceNew:
+    for ds in data.iter_channels(include_badchan=True):
+        if not hasattr(ds, "p_laser_phase"):
             print("chan %d calculating laser phase"%ds.channum)
             ds.p_laser_phase = ds.hdf5_group.create_dataset("p_laser_phase", data=spline.phase(ds.p_timestamp[:]))
         else:
