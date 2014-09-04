@@ -11,8 +11,8 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140724_ferrioxalate_pump_probe_100um_circ_2"
-dir_n = "20140724_ferrioxalate_pump_probe_100um_circ_noise"
+dir_p = "20140820_ferrioxalate_pp_4x100um_circ"
+dir_n = "20140820_ferrioxalate_pp_4x100um_circ_noise"
 # dir_p = "20140617_laser_plus_calibronium_timing/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
@@ -30,7 +30,7 @@ data.compute_noise_spectra()
 data.apply_cuts(exafs.basic_cuts, forceNew=True) # forceNew is True by default for apply_cuts, unlike most else
 data.avg_pulses_auto_masks() # creates masks and compute average pulses
 data.plot_average_pulses(-1)
-data.compute_filters(f_3db=10000.0)
+data.compute_filters(f_3db=10000.0, forceNew=True)
 data.filter_data(forceNew=False)
 pulse_timing.apply_offsets_for_monotonicity(data)
 pulse_timing.calc_laser_phase(data, forceNew=False)
@@ -39,27 +39,38 @@ data.drift_correct(forceNew=False)
 data.phase_correct2014(10, plot=False)
 data.calibrate('p_filt_value_dc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
-                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
+                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
 data.calibrate('p_filt_value_phc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
-                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
+                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
 data.time_drift_correct(forceNew=False)
 data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
-                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=True, max_pulses_for_dbscan=1e5)
+                        excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
 pulse_timing.label_pumped_band_for_alternating_pump(data, forceNew=False)
+
+ds = data.channel[1]
+cutnum = ds.CUT_NAME.index("timestamp_sec")
+for ds in data:
+    ds.cuts.clearCut(cutnum)
+    cut = ds.p_timestamp[:] > 60000
+    ds.cuts.cut(cutnum, cut)
 
 # do some quality control on the data
 pulse_timing.choose_laser(data, "laser")
-exafs.quality_control(data, exafs.edge_center_func, "FeKEdge Location")
-exafs.quality_control(data, exafs.chi2_func, "edge fit chi^2", threshold=8)
-exafs.fit_edge_in_energy_combined(data, "FeKEdge", doPlot=True)
+# exafs.quality_control(data, exafs.edge_center_func, "FeKEdge Location", threshold=7)
+exafs.quality_control(data, exafs.chi2_func, "edge fit chi^2", threshold=7)
+exafs.quality_control_range(data, exafs.edge_center_func, "FeKEdge Location", range=(7121.18-2, 7121.18+2))
+exafs.quality_control_range(data, exafs.fwhm_ev_7kev, "7keV res fwhm", range=(0, 12))
+
 
 # # write histograms
 exafs.plot_combined_spectra(data, ref_lines=["FeKEdge"])
 exafs.plot_combined_spectra(data, erange = (7080, 7300), ref_lines=["FeKEdge"])
 exafs.write_channel_histograms(data, erange=(0,20000), binsize=5)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=5)
+exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=0.1)
+exafs.write_combined_energies_hists_randsplit(data, erange=(0,20000), binsize=5)
 exafs.plot_sqrt_spectra(data)
 exafs.plot_sqrt_spectra(data, erange = (7080, 7300))
 exafs.plot_sqrt_spectra(data, erange = (6500, 7500))
@@ -71,6 +82,8 @@ ds = data.first_good_dataset
 pulse_timing.choose_laser(data,"laser")
 exafs.fit_edge_in_energy_dataset(ds, "FeKEdge",doPlot=True)
 exafs.fit_edges(data,"FeKEdge")
+(edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2, bin_centers, xi) = exafs.fit_edge_in_energy_combined(data, "FeKEdge", doPlot=True)
+
 
 mass.calibration.young.diagnose_calibration(ds.calibration['p_filt_value_tdc'], True)
 ds.compare_calibrations()
@@ -113,16 +126,18 @@ def plot_spectra_error_bars(data, erange=(0,20000), binsize=5, ref_lines = [], c
     ax.set_title(" "+desc)
 
 
-start_time = np.int64(40332)
-durations = np.arange(30, 180,30)*60
-cutnum = ds.CUT_NAME.index("timestamp_sec")
-for duration in durations[::-1]:
-    for ds in data:
-        ds.cuts.clearCut(cutnum)
-        ds.cuts.cut(cutnum, np.logical_or(ds.p_timestamp<start_time, ds.p_timestamp>(start_time+duration)))
-    print(ds.cuts.good().sum())
-    plot_spectra_error_bars(data, erange = (7080, 7300))
-    plt.title("duration %d min"%(duration/60))
+
+
+# start_time = np.int64(40332)
+# durations = np.arange(30, 180,30)*60
+# cutnum = ds.CUT_NAME.index("timestamp_sec")
+# for duration in durations[::-1]:
+#     for ds in data:
+#         ds.cuts.clearCut(cutnum)
+#         ds.cuts.cut(cutnum, np.logical_or(ds.p_timestamp<start_time, ds.p_timestamp>(start_time+duration)))
+#     print(ds.cuts.good().sum())
+#     plot_spectra_error_bars(data, erange = (7080, 7300))
+#     plt.title("duration %d min"%(duration/60))
 
 
 def findbreaks_dataset(ds):
@@ -192,7 +207,7 @@ def plot_count_rate(self, bin_s=60, title=""):
 
 
 bin_s = 60
-erange = (7120,7125)
+erange = (7150,7155)
 bin_edge = np.arange(data.first_good_dataset.p_timestamp[0],
                      data.first_good_dataset.p_timestamp[-1], bin_s)
 bin_centers = bin_edge[:-1]+0.5*(bin_edge[1]-bin_edge[0])

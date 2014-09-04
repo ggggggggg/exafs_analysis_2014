@@ -64,7 +64,7 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=Fal
     ds_frame = ds.p_timestamp[:]/ds.timebase
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
     if not "p_timestamp_raw" in ds.hdf5_group or forceNew: # only apply corrections once
-        ds.p_timestamp_raw = ds.hdf5_group.create_dataset("p_timestamp_raw", data=ds.p_timestamp)
+        if not "p_timestamp_raw" in ds.hdf5_group: ds.p_timestamp_raw = ds.hdf5_group.create_dataset("p_timestamp_raw", data=ds.p_timestamp)
         print("channel %d applying offsets for monotonicity"%ds.channum)
         if len(starts)>len(offsets):
             ems = ends-starts
@@ -137,7 +137,7 @@ def periodic_median(timestamp, f0):
     return 0.5-p0
 
 def sampled_phase(timestamp, f0, sample_time_s = 60):
-    t_sample = np.arange(timestamp[0], timestamp[-1], sample_time_s)
+    t_sample = np.arange(timestamp[0], np.amax(timestamp), sample_time_s)
     i_sample = np.searchsorted(timestamp, t_sample)
     p = np.zeros(len(t_sample)-1, dtype=np.float64)
     t = np.zeros(len(t_sample)-1, dtype=np.float64)
@@ -153,7 +153,7 @@ def splined_phase(timestamp, f0, sample_time_s=60):
     spline = mass.mathstat.CubicSpline(t_sample, phase)
     return spline
 
-def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,1001),sample_time_s=60):
+def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,1001),sample_time_s=30):
     """
     Taken an array of timestamps that contain a large but not 1 fraction of events
     happening at fixed period according to a clock with or without drift relative to the

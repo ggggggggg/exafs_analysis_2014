@@ -91,11 +91,13 @@ def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_
 
     return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
 
-def fit_edge_in_energy_combined(data, edge_name, width_ev=300, bin_size_ev=3, fwhm_guess=10.0, doPlot=False, chans=None):
+def fit_edge_in_energy_combined(data, edge_name, width_ev=300, bin_size_ev=8, fwhm_guess=10.0, doPlot=False, chans=None):
     low_energy, high_energy = mass.energy_calibration.STANDARD_FEATURES[edge_name] +  np.array([-0.5, 0.5])*width_ev
     counts, bin_centers = combined_energies_hist(data, (low_energy, high_energy), bin_size_ev, chans)
     (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2) = fit_edge_hist(bin_centers, counts, fwhm_guess)
     delta_abs_len = np.log(preHeight/postHeight)
+    xi = calc_xi(bin_centers, counts, edgeCenter, preHeight, postHeight, fwhm, bgSlope)
+
     if doPlot:
         plt.figure()
         plt.plot(bin_centers, counts)
@@ -103,9 +105,17 @@ def fit_edge_in_energy_combined(data, edge_name, width_ev=300, bin_size_ev=3, fw
         plt.xlabel("energy (eV), delta_abs_len %0.3f"%delta_abs_len)
         plt.ylabel("counts per %0.2f eV bin"%(bin_centers[1]-bin_centers[0]))
         plt.title("all channels %0.2f %0.2f %0.2f %0.2f %0.2f %0.2f"%(edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2))
-    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
+        plt.figure()
+        plt.plot(bin_centers, xi)
+        plt.xlabel("energy (eV)")
+        plt.ylabel("xi (normalized absorption)")
+        plt.grid("on")
+    return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2, bin_centers, xi)
 
-
+def calc_xi(bin_centers,counts, edgeCenter, preHeight, postHeight, fwhm, bgSlope):
+    corr_counts = counts - bgSlope*(bin_centers-edgeCenter)
+    xi = np.log(preHeight/corr_counts)/np.log(preHeight/postHeight)
+    return xi
 
 def write_histogram_dataset(ds, fname, erange=(0,20000), binsize=5):
     fname+=".spectrum"
@@ -130,8 +140,8 @@ def write_combined_energies_hists(data, erange=(0,20000), binsize=5, chans=None)
         pulse_timing.choose_laser(data,laser_choice)
         counts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
         basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
-        fname = basename+"_"+laser_choice+"_combined.spectrum"
-        np.savetxt(fname, np.vstack((bin_centers, counts)).T,fmt=("%0.1f", "%i"), header="energy bin centers (eV), counts per bin")
+        fname = basename+"_"+laser_choice+"_combined_%g.spectrum"%binsize
+        np.savetxt(fname, np.vstack((bin_centers, counts)).T,fmt=("%0.2f", "%i"), header="energy bin centers (eV), counts per bin")
 
 def combined_energies_hist(data, erange=(0,20000), binsize=5, chans=None):
     bin_edges = np.arange(erange[0], erange[1], binsize)
@@ -146,7 +156,7 @@ def combined_energies_hist(data, erange=(0,20000), binsize=5, chans=None):
 
 def plot_combined_spectrum(data,ax, erange=(0,20000), binsize=5, ref_lines = [], chans=None, label=""):
     counts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
-    ax.plot(bin_centers, counts,'.-',label=label)
+    ax.plot(bin_centers, counts,'-',label=label)
     ax.set_xlim(erange)
     ax.grid("on")
     ax.set_xlabel('energy (eV)')
@@ -257,6 +267,19 @@ def abs_diff_ratio(a):
     abs_diff_a = np.abs(a-np.median(a))
     return abs_diff_a/float(np.median(abs_diff_a))
 
+def quality_control_range(data, func, name, range=(0,1000)):
+    print("running quality control with %s and range = (%g, %g)"%(name, range[0], range[1]))
+    value = np.array([func(ds) for ds in data])
+    chans = np.array([ds.channum for ds in data])
+    plt.figure()
+    plt.plot(chans, value,'o')
+    index = np.logical_or(value<range[0], value>range[1])
+    plt.plot(chans[index], value[index],'ro')
+    plt.xlabel("channel number")
+    plt.ylabel(name)
+    for chan in chans[index]:
+        data.set_chan_bad(chan, "quality_control: %s = %0.2f"%(name, func(data.channel[chan])))
+
 def quality_control(data, func, name, threshold=10):
     print("running quality control with %s and threshold = %g"%(name, threshold))
     fig_of_merit = abs_diff_ratio([func(ds) for ds in data])
@@ -275,6 +298,9 @@ def edge_center_func(ds):
 
 def chi2_func(ds):
     return fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)[5]
+
+def fwhm_ev_7kev(ds):
+    return np.mean(ds.calibration["p_filt_value_tdc"].energy_resolutions[6:9])
 
 def undo_quality_control(data):
     for k in data.why_chan_bad:
@@ -365,3 +391,38 @@ def plot_sqrt_spectra(data, erange=(0,20000), binsize=5, ref_lines = [], chans=N
     ax.set_xlabel('energy (eV)')
     ax.set_ylabel('(u-p)/sqrt(u/2+p/2) per %.2f eV bin'%(bin_centers[1]-bin_centers[0]))
     ax.set_title("coadded PUMPED AND UNPUMPED %d pixel"%data.num_good_channels)
+
+## random splits in the data
+def randsplit_dataset(ds):
+    cutnum = len(ds.CUT_NAME)
+    ds.cuts.clearCut(cutnum)
+    randcut = np.random.randint(0,2,size=ds.nPulses)==1
+    ds.cuts.cut(cutnum, randcut)
+
+def switch_randsplit_dataset(ds):
+    cutnum = len(ds.CUT_NAME)
+    switchcut = ~ds.cuts.isCut(cutnum)
+    ds.cuts.clearCut(cutnum)
+    ds.cuts.cut(cutnum, switchcut)
+
+def randsplit(data):
+    for ds in data:
+        randsplit_dataset(ds)
+
+def switch_randsplit(data):
+    for ds in data:
+        switch_randsplit_dataset(ds)
+
+def write_combined_energies_hists_randsplit(data, erange=(0,20000), binsize=5, chans=None):
+    pulse_timing.choose_laser(data,"laser")
+    for j in range(4):
+        randsplit(data)
+        counts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
+        basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
+        fname = basename+"_"+"randsplit_%d_A"%j+"_combined.spectrum"
+        np.savetxt(fname, np.vstack((bin_centers, counts)).T,fmt=("%0.1f", "%i"), header="energy bin centers (eV), counts per bin")
+        switch_randsplit(data)
+        counts, bin_centers = combined_energies_hist(data, erange, binsize, chans)
+        basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
+        fname = basename+"_"+"randsplit_%d_B"%j+"_combined.spectrum"
+        np.savetxt(fname, np.vstack((bin_centers, counts)).T,fmt=("%0.1f", "%i"), header="energy bin centers (eV), counts per bin")
