@@ -61,23 +61,23 @@ def monotonicity(ljh_fname):
 
 
 def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=False):
-    ds_frame = ds.p_timestamp/ds.timebase
-    if not hasattr(ds, "p_timestamp_raw"): ds.p_timestamp_raw = ds.p_timestamp.copy()
+    ds_frame = ds.p_timestamp[:]/ds.timebase
     starts, ends = monotonic_frame_ranges(ds_frame, minlen=0)
-    if all(ds.p_timestamp_raw==ds.p_timestamp) or forceNew: # only apply corrections once
+    if not "p_timestamp_raw" in ds.hdf5_group or forceNew: # only apply corrections once
+        if not "p_timestamp_raw" in ds.hdf5_group: ds.p_timestamp_raw = ds.hdf5_group.create_dataset("p_timestamp_raw", data=ds.p_timestamp)
         print("channel %d applying offsets for monotonicity"%ds.channum)
         if len(starts)>len(offsets):
             ems = ends-starts
             starts = sorted(starts[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
             ends = sorted(ends[np.argsort(ems)[-len(offsets):]]) # drop the shortest regions
-        out = ds.p_timestamp_raw.copy()
+        out = ds.p_timestamp_raw[:]
         for j in xrange(1,len(starts)):
             out[ends[j-1]+1:ends[j]+1]+=offsets[j]*ds.timebase
         if not test:
-            ds.p_timestamp = out
+            ds.p_timestamp[:] = out
         else:
             plt.figure()
-            plt.plot(ds.p_timestamp,'.')
+            plt.plot(ds.p_timestamp[:],'.')
             for j in xrange(1,len(starts)):
                 plt.plot([ends[j-1], ends[j]], offsets[j]*ds.timebase*np.array([1,1]))
                 plt.plot(out)
@@ -86,6 +86,8 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=Fal
             print("starts", starts)
             print("ends", ends)
         return out
+    else:
+        ds.p_timestamp_raw = ds.hdf5_group["p_timestamp_raw"]
 
 
 def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False):
@@ -95,7 +97,7 @@ def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False
         apply_offsets_for_monotonicity_dataset(offsets, ds, test, forceNew)
     if doPlot:
         plt.figure()
-        plt.plot([ds.channum for ds in data], [np.amax(np.diff(ds.p_timestamp)) for ds in data],'.')
+        plt.plot([ds.channum for ds in data], [np.amax(np.diff(ds.p_timestamp[:])) for ds in data],'.')
         plt.xlabel("channel number")
         plt.ylabel("largest jump in p_timestamp")
 
@@ -135,12 +137,15 @@ def periodic_median(timestamp, f0):
     return 0.5-p0
 
 def sampled_phase(timestamp, f0, sample_time_s = 60):
-    t_sample = np.arange(timestamp[0], timestamp[-1], sample_time_s)
+    t_sample = np.arange(timestamp[0], np.amax(timestamp), sample_time_s)
     i_sample = np.searchsorted(timestamp, t_sample)
     p = np.zeros(len(t_sample)-1, dtype=np.float64)
+    t = np.zeros(len(t_sample)-1, dtype=np.float64)
     for j in xrange(len(i_sample)-1):
-        p[j] = periodic_median(timestamp[i_sample[j]:i_sample[j+1]],f0)
-    return t_sample[:-1]+0.5*sample_time_s, p
+        if i_sample[j+1] - i_sample[j] > 300:
+            p[j] = periodic_median(timestamp[i_sample[j]:i_sample[j+1]],f0)
+            t[j] = t_sample[j]
+    return t[t!=0]+0.5*sample_time_s, p[t!=0]
 
 def splined_phase(timestamp, f0, sample_time_s=60):
     t_sample, phase = sampled_phase(timestamp, f0, sample_time_s)
@@ -148,7 +153,7 @@ def splined_phase(timestamp, f0, sample_time_s=60):
     spline = mass.mathstat.CubicSpline(t_sample, phase)
     return spline
 
-def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,1001),sample_time_s=60):
+def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,1001),sample_time_s=30):
     """
     Taken an array of timestamps that contain a large but not 1 fraction of events
     happening at fixed period according to a clock with or without drift relative to the
@@ -175,7 +180,7 @@ def calc_phase(timestamp,f0=None,flatten=True,num_bands=2,f_guess_range=(1000,10
         return (timestamp*f0)%num_bands,f0, None
 
 def phase_2band_find(phase, cut_lines=[0.012,0.012], median=None):
-    if median is None: median = np.median(phase%1)
+    if median is None: median = np.median(phase[0:min(50000, len(phase))]%1)
     a,b = median-cut_lines[0], median+cut_lines[1] # make cuts on either side of it
     band1 = np.logical_and(a<phase, phase<b)
     band2 = np.logical_and((a+1)<phase, phase<(b+1))
@@ -211,7 +216,7 @@ def periodogram(timestamp, cut_lines=[0.012,0.012], flatten=True, split=True):
     plt.title("f0=%f"%f0)
 
 def dataset_periodogram2(ds):
-    periodogram2(ds.p_timestamp)
+    periodogram2(ds.p_timestamp[:])
 
 def extrap(x, xp, yp):
     """np.interp function with linear extrapolation"""
@@ -229,22 +234,29 @@ def downsampled(x, samples_per_newsample):
 def calc_laser_phase(data, forceNew=False):
     #try to pick a reasonable dataset to get f0 and the spline from
     for ds in data:
-        print("looking at chan %d as potential source of phase spline"%ds.channum)
-        try:
-            phase,f0, spline = calc_phase(ds.p_timestamp) # for the purposes of finding f0
-        except:
-            print("chan %d rejected for failing to calculate phase"%ds.channum)
-            continue
-        band1, band2, bandNone = phase_2band_find(phase)
-        if len(band1)/float(ds.nPulses) > 0.2 and len(band2)/float(ds.nPulses)>0.2 and len(bandNone)/float(ds.nPulses) >0.01:
-            break
-        else:
-            print("chan %d rejected for not having a reasonable distribution of pulses in bands"%ds.channum)
+        if "p_laser_phase" in ds.hdf5_group:
+            ds.p_laser_phase = ds.hdf5_group["p_laser_phase"]
+    if forceNew or any([not hasattr(ds, "p_laser_phase") for ds in data]):
+        for ds in data:
+            print("looking at chan %d as potential source of phase spline"%ds.channum)
+            try:
+                phase,f0, spline = calc_phase(ds.p_timestamp[:]) # for the purposes of finding f0
+            except:
+                print("chan %d rejected for failing to calculate phase"%ds.channum)
+                continue
+            band1, band2, bandNone = phase_2band_find(phase)
+            if len(band1)/float(ds.nPulses) > 0.2 and len(band2)/float(ds.nPulses)>0.2 and len(bandNone)/float(ds.nPulses) >0.01:
+                break
+            else:
+                print("chan %d rejected for not having a reasonable distribution of pulses in bands"%ds.channum)
+    else:
+        print("skipping all of calc_laser_phase, all already done")
+        return
     print("using spline from %d with %d pulses"%(ds.channum, ds.nPulses))
-    for ds in data:
-        if not hasattr(ds, "p_laser_phase") or forceNew:
+    for ds in data.iter_channels(include_badchan=True):
+        if not hasattr(ds, "p_laser_phase"):
             print("chan %d calculating laser phase"%ds.channum)
-            ds.p_laser_phase = spline.phase(ds.p_timestamp)
+            ds.p_laser_phase = ds.hdf5_group.create_dataset("p_laser_phase", data=spline.phase(ds.p_timestamp[:]))
         else:
             print("chan %d skipping calculate laser phase, already done"%ds.channum)
 
@@ -262,15 +274,17 @@ def choose_laser_dataset(ds, band, cut_lines=[0.012,0.012]):
     ds.cuts.clearCut(cutnum)
     median = np.median(ds.p_laser_phase[ds.cuts.good()]%1) # use only "good" pulses for median
     band1, band2, bandNone = phase_2band_find(ds.p_laser_phase,cut_lines=cut_lines, median=median)
+
+    if band == "pumped" or band == "unpumped":
+        if not "pumped_band_knowledge" in ds.hdf5_group: raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
+        pumped_band_knowledge = ds.hdf5_group["pumped_band_knowledge"].value
     if band == "pumped":
-        if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-        band=str(ds.pumped_band_knowledge)
+        band=str(pumped_band_knowledge)
     if band == 'unpumped':
-        if not hasattr(ds, "pumped_band_knowledge"): raise ValueError("unknown which band is pumped, try calling label_pump_band_for_alternating_pump")
-        if ds.pumped_band_knowledge==1:
+        if pumped_band_knowledge==1:
             band='2'
         else:
-            band = '1'
+            band ='1'
     if band == '1':
         ds.cuts.cut(cutnum, np.logical_not(band1))
     elif band == '2':
@@ -301,11 +315,11 @@ def mic_triggers_as_timestamps(ds):
 
 def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot=True):
     mic_timestamps = mic_triggers_as_timestamps(ds)
-    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase)
-    band1_timestamps = ds.p_timestamp[band1]
-    band2_timestamps = ds.p_timestamp[band2]
+    band1, band2, bandNone = phase_2band_find(ds.p_laser_phase[:])
+    band1_timestamps = ds.p_timestamp[:][band1]
+    band2_timestamps = ds.p_timestamp[:][band2]
     #cut out mic_timestamps that come before or after ds timestamps
-    mic_timestamps = mic_timestamps[np.logical_and(mic_timestamps>ds.p_timestamp[1], mic_timestamps<min(band1_timestamps[-1], band2_timestamps[-1]))]
+    mic_timestamps = mic_timestamps[np.logical_and(mic_timestamps>ds.p_timestamp[:][1], mic_timestamps<min(band1_timestamps[-1], band2_timestamps[-1]))]
     mic_index_band1 = np.searchsorted(band1_timestamps, mic_timestamps)
     mic_index_band2 = np.searchsorted(band2_timestamps, mic_timestamps)
     band1_med_diff = np.abs(0.5-periodic_median((band1_timestamps[mic_index_band1]-mic_timestamps), pump_freq_hz))
@@ -336,7 +350,8 @@ def label_pumped_band_for_alternating_pump_datsaset(ds, pump_freq_hz=500, doPlot
     return pumped_band
 
 def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, forceNew=False):
-    pre_knowledge = [ds.pumped_band_knowledge for ds in data if ds.pumped_band_knowledge is not None]
+    print("starting label_pumped_band_for_alternating_pump")
+    pre_knowledge = [ds.hdf5_group["pumped_band_knowledge"].value for ds in data if "pumped_band_knowledge" in ds.hdf5_group]
     pumped_band = None
     if len(pre_knowledge)>0:
         if all([pre_knowledge[i] == pre_knowledge[0] for i in xrange(len(pre_knowledge))]):
@@ -352,4 +367,4 @@ def label_pumped_band_for_alternating_pump(data, pump_freq_hz=500, doPlot=True, 
     else:
         print("skipping labeling of pumped band, because the band is already labeled")
     for ds in data:
-        ds.pumped_band_knowledge=pumped_band
+        if not "pumped_band_knowledge" in ds.hdf5_group: ds.hdf5_group["pumped_band_knowledge"]=pumped_band
