@@ -11,8 +11,8 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140820_ferrioxalate_pp_4x100um_circ"
-dir_n = "20140820_ferrioxalate_pp_4x100um_circ_noise"
+dir_p = "20140903_ferrioxalate_8x100um_circ"
+dir_n = "20140903_noise"
 # dir_p = "20140617_laser_plus_calibronium_timing/"
 # dir_n = "20140617_laser_plus_calibronium_timing_noise/"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
@@ -25,7 +25,7 @@ data = mass.TESGroup(pulse_files, noise_files)
 
 
 # analyze data
-data.summarize_data(peak_time_microsec=220.0, forceNew=False)
+data.summarize_data(peak_time_microsec=500.0, forceNew=False)
 data.compute_noise_spectra()
 data.apply_cuts(exafs.basic_cuts, forceNew=True) # forceNew is True by default for apply_cuts, unlike most else
 data.avg_pulses_auto_masks() # creates masks and compute average pulses
@@ -51,10 +51,10 @@ pulse_timing.label_pumped_band_for_alternating_pump(data, forceNew=False)
 
 ds = data.channel[1]
 cutnum = ds.CUT_NAME.index("timestamp_sec")
-for ds in data:
-    ds.cuts.clearCut(cutnum)
-    cut = ds.p_timestamp[:] > 60000
-    ds.cuts.cut(cutnum, cut)
+# for ds in data:
+#     ds.cuts.clearCut(cutnum)
+#     cut = ds.p_timestamp[:] > 60000
+#     ds.cuts.cut(cutnum, cut)
 
 # do some quality control on the data
 pulse_timing.choose_laser(data, "laser")
