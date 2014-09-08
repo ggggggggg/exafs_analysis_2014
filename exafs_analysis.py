@@ -28,15 +28,21 @@ data = mass.TESGroup(pulse_files, noise_files)
 data.summarize_data(peak_time_microsec=500.0, forceNew=False)
 data.compute_noise_spectra()
 data.apply_cuts(exafs.basic_cuts, forceNew=True) # forceNew is True by default for apply_cuts, unlike most else
+ds = data.channel[1]
+cutnum = ds.CUT_NAME.index("timestamp_sec")
+for ds in data:
+    ds.cuts.clearCut(cutnum)
+    cut = np.logical_and(ds.p_timestamp[:] > 12527, ds.p_timestamp[:] < 17300)
+    ds.cuts.cut(cutnum, cut)
 data.avg_pulses_auto_masks() # creates masks and compute average pulses
 data.plot_average_pulses(-1)
-data.compute_filters(f_3db=10000.0, forceNew=True)
+data.compute_filters(f_3db=10000.0, forceNew=False)
 data.filter_data(forceNew=False)
-pulse_timing.apply_offsets_for_monotonicity(data)
-pulse_timing.calc_laser_phase(data, forceNew=False)
+# pulse_timing.apply_offsets_for_monotonicity(data)
+pulse_timing.calc_laser_phase(data, forceNew=False, sample_time_s=90)
 pulse_timing.choose_laser(data, "not_laser")
 data.drift_correct(forceNew=False)
-data.phase_correct2014(10, plot=False)
+data.phase_correct2014(10, plot=False, forceNew=True)
 data.calibrate('p_filt_value_dc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
@@ -49,12 +55,8 @@ data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha'
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
 pulse_timing.label_pumped_band_for_alternating_pump(data, forceNew=False)
 
-ds = data.channel[1]
-cutnum = ds.CUT_NAME.index("timestamp_sec")
-# for ds in data:
-#     ds.cuts.clearCut(cutnum)
-#     cut = ds.p_timestamp[:] > 60000
-#     ds.cuts.cut(cutnum, cut)
+
+
 
 # do some quality control on the data
 pulse_timing.choose_laser(data, "laser")
@@ -92,7 +94,7 @@ exafs.timestructure_dataset(ds,"p_filt_value_phc")
 exafs.calibration_summary(data, "p_filt_value_tdc")
 exafs.pulse_summary(data)
 exafs.leftover_phc(data)
-data.plot_count_rate()
+# data.plot_count_rate()
 
 # save plots
 exafs.save_all_plots(data)

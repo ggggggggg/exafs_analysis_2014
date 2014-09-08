@@ -41,12 +41,15 @@ def monotonicity(ljh_fname):
     period_entries = 4 # psuedo-period in plot of diff(crate_epoch_usec), it was 4 when I looked, but it may not always be 4
     resampling_period_s = 1
     samples_per_newsample = int(period_entries*np.ceil(1e6*resampling_period_s/(period_entries*np.mean(np.diff(crate_epoch_usec)))))
+    keep = ends-starts > samples_per_newsample
+    starts = starts[keep]
+    ends=ends[keep]
     resampled_crate_epoch = []
     resampled_crate_frame = []
+
     for j in range(len(starts)):
         resampled_crate_epoch.append(downsampled(crate_epoch_usec[starts[j]:ends[j]], samples_per_newsample))
         resampled_crate_frame.append(downsampled(crate_frame[starts[j]:ends[j]], samples_per_newsample))
-
     start_frames = [resampled_crate_frame[0][0]]
     offsets = []
     for j in range(len(starts)):
@@ -199,7 +202,7 @@ def periodogram2(timestamp, cut_lines = [0.012,0.012]):
     cut_lines[0]*=-1
     for j in xrange(4):
         plt.plot([timestamp[0], timestamp[-1]], (np.median(timestamp%1)+np.array([1,1])*(cut_lines[j%2]+(1 if j>1 else 0)))%num_bands,'k')
-    plt.xlabel("time (s)")
+    plt.x("time (s)")
     plt.ylabel("flattened phase/2*pi")
     plt.title("f0=%f"%f0)
 
@@ -231,7 +234,7 @@ def downsampled(x, samples_per_newsample):
     return np.mean(reshaped_x, 1)
 
 
-def calc_laser_phase(data, forceNew=False):
+def calc_laser_phase(data, forceNew=False, sample_time_s=30):
     #try to pick a reasonable dataset to get f0 and the spline from
     for ds in data:
         if "p_laser_phase" in ds.hdf5_group:
@@ -240,7 +243,7 @@ def calc_laser_phase(data, forceNew=False):
         for ds in data:
             print("looking at chan %d as potential source of phase spline"%ds.channum)
             try:
-                phase,f0, spline = calc_phase(ds.p_timestamp[:]) # for the purposes of finding f0
+                phase,f0, spline = calc_phase(ds.p_timestamp[:], sample_time_s=sample_time_s) # for the purposes of finding f0
             except:
                 print("chan %d rejected for failing to calculate phase"%ds.channum)
                 continue
