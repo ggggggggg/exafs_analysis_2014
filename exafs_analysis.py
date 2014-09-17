@@ -11,18 +11,16 @@ import traceback, sys
 
 # load data
 dir_base = "/Volumes/Drobo/exafs_data"
-dir_p = "20140903_ferrioxalate_8x100um_circ"
-dir_n = "20140903_noise"
-# dir_p = "20140617_laser_plus_calibronium_timing/"
-# dir_n = "20140617_laser_plus_calibronium_timing_noise/"
+dir_p = "20140820_ferrioxalate_pp_4x100um_circ"
+dir_n = "20140820_ferrioxalate_pp_4x100um_circ_noise"
 available_chans = mass.ljh_get_channels_both(path.join(dir_base, dir_p), path.join(dir_base, dir_n))
 if len(available_chans)==0: raise ValueError("no channels have both noise and pulse data")
 chan_nums = available_chans[:]
 pulse_files = mass.ljh_chan_names(path.join(dir_base, dir_p), chan_nums)
 noise_files = mass.ljh_chan_names(path.join(dir_base, dir_n), chan_nums)
 data = mass.TESGroup(pulse_files, noise_files)
-# exafs.copy_file_to_mass_output(__file__, data.datasets[0].filename) #copy this script to mass_output
-
+if "__file__" in locals():
+    exafs.copy_file_to_mass_output(__file__, data.datasets[0].filename) #copy this script to mass_output
 
 # analyze data
 data.summarize_data(peak_time_microsec=500.0, forceNew=False)
@@ -30,10 +28,6 @@ data.compute_noise_spectra()
 data.apply_cuts(exafs.basic_cuts, forceNew=True) # forceNew is True by default for apply_cuts, unlike most else
 ds = data.channel[1]
 cutnum = ds.CUT_NAME.index("timestamp_sec")
-for ds in data:
-    ds.cuts.clearCut(cutnum)
-    cut = np.logical_and(ds.p_timestamp[:] > 12527, ds.p_timestamp[:] < 17300)
-    ds.cuts.cut(cutnum, cut)
 data.avg_pulses_auto_masks() # creates masks and compute average pulses
 data.plot_average_pulses(-1)
 data.compute_filters(f_3db=10000.0, forceNew=False)
@@ -42,7 +36,7 @@ data.filter_data(forceNew=False)
 pulse_timing.calc_laser_phase(data, forceNew=False, sample_time_s=90)
 pulse_timing.choose_laser(data, "not_laser")
 data.drift_correct(forceNew=False)
-data.phase_correct2014(10, plot=False, forceNew=True)
+data.phase_correct2014(10, plot=False, forceNew=False)
 data.calibrate('p_filt_value_dc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
@@ -54,7 +48,6 @@ data.calibrate('p_filt_value_tdc', ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha'
                         size_related_to_energy_resolution=20.0,min_counts_per_cluster=20,
                         excl=[],forceNew=False, max_num_clusters = 18, plot_on_fail=False, max_pulses_for_dbscan=1e5)
 pulse_timing.label_pumped_band_for_alternating_pump(data, forceNew=False)
-
 
 
 
@@ -94,7 +87,7 @@ exafs.timestructure_dataset(ds,"p_filt_value_phc")
 exafs.calibration_summary(data, "p_filt_value_tdc")
 exafs.pulse_summary(data)
 exafs.leftover_phc(data)
-# data.plot_count_rate()
+data.plot_count_rate()
 
 # save plots
 exafs.save_all_plots(data)
@@ -208,24 +201,3 @@ def plot_count_rate(self, bin_s=60, title=""):
     plt.legend()
 
 
-bin_s = 60
-erange = (7150,7155)
-bin_edge = np.arange(data.first_good_dataset.p_timestamp[0],
-                     data.first_good_dataset.p_timestamp[-1], bin_s)
-bin_centers = bin_edge[:-1]+0.5*(bin_edge[1]-bin_edge[0])
-rates_all = np.array([ds.count_rate(False, bin_edge)[1] for ds in data])
-pulse_timing.choose_laser(data,"pumped")
-cutnum = ds.CUT_NAME.index("energy")
-for ds in data:
-    ds.cuts.clearCut(cutnum)
-    ds.cuts.cut(cutnum, np.logical_or(ds.p_energy[:]<erange[0], ds.p_energy[:]>erange[1]))
-rates_good_pumped = np.array([ds.count_rate(True, bin_edge)[1] for ds in data])
-
-for ds in data:
-    ds.cuts.clearCut(cutnum)
-
-plt.figure()
-plt.plot(bin_centers, rates_all.sum(axis=0), label="all")
-plt.plot(bin_centers, rates_good_pumped.sum(axis=0), label="pumped %s ev"%str(erange))
-plt.xlabel("time (s)")
-plt.ylabel("trigger rate")

@@ -77,6 +77,8 @@ def apply_offsets_for_monotonicity_dataset(offsets, ds, test=False, forceNew=Fal
         for j in xrange(1,len(starts)):
             out[ends[j-1]+1:ends[j]+1]+=offsets[j]*ds.timebase
         if not test:
+            if not all(np.diff(out)>=0): #output is fully sorted
+                raise ValueError("seriously, this needs be sorted")
             ds.p_timestamp[:] = out
         else:
             plt.figure()
