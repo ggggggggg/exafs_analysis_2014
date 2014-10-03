@@ -84,3 +84,15 @@ def choose_laser(data, band, keep_size=0.010, exclude_size=0.014, forceNew=False
     for ds in data:
         choose_laser_dataset(ds, band, keep_size, exclude_size, forceNew)
 
+def plot_phase(ds):
+    for i,b in enumerate(["laser", "pumped", "unpumped", "not_laser"]):
+        choose_laser_dataset(ds, b)
+        counts, bin_edges = np.histogram(ds.p_laser_phase[ds.cuts.good()], np.linspace(0,2,1000))
+        bin_centers = bin_edges[1:]-0.5*(bin_edges[1]-bin_edges[0])
+        if b == "laser":
+            plt.plot(bin_centers, counts, label=b, lw=2.5)
+        else:
+            plt.plot(bin_centers, counts+i, label=b)
+    plt.xlabel("laser phase (0.5 should be pumped, 1.5 unpumped)")
+    plt.ylabel("number of good pulses per bin")
+    plt.legend()

@@ -91,13 +91,4 @@ data.plot_count_rate()
 exafs.save_all_plots(data)
 
 
-for i,b in enumerate(["laser", "pumped", "unpumped", "not_laser"]):
-    pulse_timing.choose_laser(data, b)
-    counts, bin_edges = np.histogram(ds.p_laser_phase[ds.cuts.good()], np.linspace(0,2,1000))
-    bin_centers = bin_edges[1:]-0.5*(bin_edges[1]-bin_edges[0])
-    if b == "laser":
-        plt.plot(bin_centers, counts, label=b, lw=2.5)
-    else:
-        plt.plot(bin_centers, counts+i, label=b)
-plt.legend()
 
