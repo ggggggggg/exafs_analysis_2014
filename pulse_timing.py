@@ -47,10 +47,10 @@ def calc_laser_cuts_dataset(ds, forceNew=False, keep_size=0.012, exclude_size=0.
         if s in ds.hdf5_group: del(ds.hdf5_group[s])
     ds.hdf5_group["pumped_bool"] = np.abs(ds.p_laser_phase[:]-0.5)<keep_size
     ds.hdf5_group["unpumped_bool"] = np.abs(ds.p_laser_phase[:]-1.5)<keep_size
-    ds.hdf5_group["not_laser_bool"] = np.logical_and(np.abs(ds.p_laser_phase[:]-1.5)>exclude_size, np.abs(ds.p_laser_phase[:]-1.5)>exclude_size)
+    ds.hdf5_group["not_laser_bool"] = np.logical_and(np.abs(ds.p_laser_phase[:]-0.5)>exclude_size, np.abs(ds.p_laser_phase[:]-1.5)>exclude_size)
 
 
-def choose_laser_dataset(ds, band, keep_size=0.012, exclude_size=0.014):
+def choose_laser_dataset(ds, band, keep_size=0.010, exclude_size=0.014,forceNew=False):
     """
     uses the dataset.cuts object to mark bad all pulses not in a specific category related
     to laser timing
@@ -59,7 +59,7 @@ def choose_laser_dataset(ds, band, keep_size=0.012, exclude_size=0.014):
     :param cut_lines: same as phase_2band_find
     :return: None
     """
-    calc_laser_cuts_dataset(ds, False, keep_size, exclude_size) # knows to check hdf5 file first
+    calc_laser_cuts_dataset(ds, forceNew, keep_size, exclude_size) # knows to check hdf5 file first
     band = str(band).lower()
     cutnum = ds.CUT_NAME.index('timing')
     ds.cuts.clearCut(cutnum)
@@ -69,14 +69,18 @@ def choose_laser_dataset(ds, band, keep_size=0.012, exclude_size=0.014):
     elif band == "unpumped":
         tocut = ~(ds.hdf5_group["unpumped_bool"][:])
     elif band == "laser":
-        tocut = ~np.logical_and(ds.hdf5_group["pumped_bool"][:], ds.hdf5_group["unpumped_bool"][:])
+        tocut = ~np.logical_or(ds.hdf5_group["pumped_bool"][:], ds.hdf5_group["unpumped_bool"][:])
     elif band == "not_laser":
         tocut = ~(ds.hdf5_group["not_laser_bool"][:])
+    elif band == "all":
+        return
+    else:
+        raise ValueError("%s is not a valid laser choie"%band)
 
     ds.cuts.cut(cutnum, tocut)
 
-def choose_laser(data, band, keep_size=0.012, exclude_size=0.014):
+def choose_laser(data, band, keep_size=0.010, exclude_size=0.014, forceNew=False):
     print("Choosing otherwise good %s pulses via cuts."%band.upper())
     for ds in data:
-        choose_laser_dataset(ds, band, keep_size, exclude_size)
+        choose_laser_dataset(ds, band, keep_size, exclude_size, forceNew)
 
