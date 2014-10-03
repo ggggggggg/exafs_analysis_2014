@@ -35,6 +35,8 @@ data.filter_data(forceNew=False)
 pulse_timing.calc_laser_phase(data, forceNew=False)
 pulse_timing.choose_laser(data, "not_laser")
 
+pulse_timing.plot_phase(data.first_good_dataset)
+
 data.drift_correct(forceNew=False)
 data.phase_correct2014(10, plot=False, forceNew=False)
 data.calibrate('p_filt_value_dc',  ['VKAlpha', 'MnKAlpha', 'MnKBeta', 'FeKAlpha', 'CoKAlpha', 'CoKBeta', 'CuKAlpha', "FeKBeta", "VKBeta","CuKBeta","ScKAlpha","NiKAlpha"],

@@ -96,3 +96,4 @@ def plot_phase(ds):
     plt.xlabel("laser phase (0.5 should be pumped, 1.5 unpumped)")
     plt.ylabel("number of good pulses per bin")
     plt.legend()
+    plt.title("channel %g"%ds.channum)
