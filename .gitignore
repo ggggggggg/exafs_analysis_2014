@@ -10,3 +10,5 @@ timestamp.py
 server_log.txt
 
 *.zip
+
+*.txt

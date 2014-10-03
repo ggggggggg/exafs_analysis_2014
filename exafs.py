@@ -97,7 +97,9 @@ def fit_edge_in_energy_combined(data, edge_name, width_ev=300, bin_size_ev=8, fw
     (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2) = fit_edge_hist(bin_centers, counts, fwhm_guess)
     delta_abs_len = np.log(preHeight/postHeight)
     xi = calc_xi(bin_centers, counts, edgeCenter, preHeight, postHeight, fwhm, bgSlope)
-
+    basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
+    fname = basename+"_"+"xi_laser_combined.spectrum"
+    np.savetxt(fname, np.vstack((bin_centers, xi)))
     if doPlot:
         plt.figure()
         plt.plot(bin_centers, counts)
