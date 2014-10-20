@@ -11,12 +11,13 @@ import shutil
 basic_cuts = mass.core.controller.AnalysisControl(
     pulse_average=(0.0, None),
     pretrigger_rms=(None, 30.0),
-    pretrigger_mean_departure_from_median=(-40.0, 40.0),
+    pretrigger_mean_departure_from_median=(-120.0, 120.0),
     peak_value=(0.0, None),
     postpeak_deriv=(None, 250.0),
     rise_time_ms=(None, 0.6),
-    peak_time_ms=(None, 0.8))
-
+    peak_time_ms=(None, 0.8),
+    timestamp_diff_sec=(0.008,None)
+)
 
 
 def timestructure_dataset(ds, calname="p_filt_value_dc"):
