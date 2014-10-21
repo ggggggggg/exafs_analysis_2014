@@ -78,7 +78,7 @@ exafs.quality_control_range(data, exafs.fwhm_ev_7kev, "7keV res fwhm", range=(0,
 
 # # write histograms
 exafs.plot_combined_spectra(data, ref_lines=["FeKEdge"])
-exafs.plot_combined_spectra(data, erange = (7050, 7500), ref_lines=["FeKEdge"])
+exafs.plot_combined_spectra(data, erange = (7080, 7300), ref_lines=["FeKEdge"])
 exafs.write_channel_histograms(data, erange=(0,20000), binsize=2)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=2)
 exafs.write_combined_energies_hists(data, erange=(0,20000), binsize=0.1)

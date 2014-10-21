@@ -35,7 +35,7 @@ local_basic_cuts = mass.core.controller.AnalysisControl(
     postpeak_deriv=(None, 250.0),
     rise_time_ms=(None, 0.6),
     peak_time_ms=(None, 0.8),
-    timestamp_diff_sec=(0.01,None))
+    timestamp_diff_sec=(0.015,None))
 
 for key in dirp.keys():
     dir_p = dirp[key]
@@ -112,7 +112,7 @@ plt.ylim(3,18)
 plt.minorticks_on()
 plt.grid("on", "minor")
 
-
+plt.figure()
 vdv = [ds.filter.predicted_v_over_dv["noconst"] for ds in datas[4]]
 # nonlin = [ds.calibration["p_filt_value_tdc"].cal.refined_peak_positions for ds in datas[4]]
 outer_ds = datas[4].channel[1]

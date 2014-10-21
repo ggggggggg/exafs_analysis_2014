@@ -7,6 +7,8 @@ import os
 from os import path
 import pulse_timing
 import shutil
+from matplotlib.backends.backend_pdf import PdfPages
+import datetime
 
 basic_cuts = mass.core.controller.AnalysisControl(
     pulse_average=(0.0, None),
@@ -23,24 +25,26 @@ basic_cuts = mass.core.controller.AnalysisControl(
 def timestructure_dataset(ds, calname="p_filt_value_dc"):
     pulse_timing.choose_laser_dataset(ds, "not_laser")
     cal = ds.calibration[calname]
-    energy = ds.p_energy[ds.cuts.good()]
-    cmap = plt.get_cmap()
-    cmap = [cmap(i/float(len(cal.elements))) for i in xrange(len(cal.elements))]
+    # energy = ds.p_energy[ds.cuts.good()]
+    # cmap = plt.get_cmap()
+    # cmap = [cmap(i/float(len(cal.elements))) for i in xrange(len(cal.elements))]
 
-    plt.figure()
-    plt.plot(ds.p_timestamp[ds.cuts.good()], ds.p_energy[ds.cuts.good()],'.')
-    plt.xlabel("frame timestamp (s)")
-    plt.ylabel("p_energy")
-    plt.title("chan %d, not_laser pulses selected"%ds.channum)
+    for line_name in ["CoKAlpha", "FeKAlpha", "MnKAlpha"]:
+        try:
+            plt.figure()
+            low,high = mass.energy_calibration.STANDARD_FEATURES[line_name]*np.array([0.995, 1.005])
+            use = np.logical_and(np.logical_and(ds.cuts.good(), ds.p_energy>low), ds.p_energy<high)
+            plt.plot(ds.p_timestamp[use], ds.p_energy[use],'.')
+            plt.xlabel("frame timestamp (s)")
+            plt.ylabel("p_energy")
+            pfit = np.polyfit(ds.p_timestamp[use], ds.p_energy[use],1)
+            plt.title("chan %d, %s, not_laser pulses selected\nslope= %0.2f eV/hr"%(ds.channum, line_name, pfit[0]*3600))
+            plt.minorticks_on()
+            plt.grid("on")
+            plt.grid("on", which="minor")
+        except:
+            pass
 
-    for i,line_name in enumerate(cal.elements):
-        low,high = mass.energy_calibration.STANDARD_FEATURES[line_name]*np.array([0.99, 1.01])
-        use = np.logical_and(energy>low, energy<high)
-        use_time = ds.p_timestamp[ds.cuts.good()][use]
-        pfit = np.polyfit(use_time, energy[use],1)
-        plt.plot(use_time, np.polyval(pfit, use_time),c=cmap[i], label=line_name+" %0.2f eV/hr"%(pfit[0]*3600))
-        plt.plot(use_time, energy[use],'.',c=cmap[i])
-        plt.legend()
 
 from scipy.special import erf
 def edge_model(x, edgeCenter, preHeight, postHeight, fwhm=7.0, bgSlope=0):
@@ -93,14 +97,14 @@ def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_
     return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
 
 def fit_edge_in_energy_combined(data, edge_name, width_ev=300, bin_size_ev=8, fwhm_guess=10.0, doPlot=False, chans=None):
-    low_energy, high_energy = mass.energy_calibration.STANDARD_FEATURES[edge_name] +  np.array([-0.5, 0.5])*width_ev
+    low_energy, high_energy = mass.energy_calibration.STANDARD_FEATURES[edge_name] +  np.array([-0.5, 1.1])*width_ev
     counts, bin_centers = combined_energies_hist(data, (low_energy, high_energy), bin_size_ev, chans)
     (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2) = fit_edge_hist(bin_centers, counts, fwhm_guess)
     delta_abs_len = np.log(preHeight/postHeight)
     xi = calc_xi(bin_centers, counts, edgeCenter, preHeight, postHeight, fwhm, bgSlope)
     basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
     fname = basename+"_"+"xi_laser_combined.spectrum"
-    np.savetxt(fname, np.vstack((bin_centers, xi)))
+    np.savetxt(fname, np.vstack((bin_centers, xi)).T)
     if doPlot:
         plt.figure()
         plt.plot(bin_centers, counts)
@@ -128,7 +132,13 @@ def write_histogram_dataset(ds, fname, erange=(0,20000), binsize=5):
     np.savetxt(fname, np.vstack((bin_centers, counts)).T,fmt=("%0.1f", "%i"), header="energy bin centers (eV), counts per bin")
 
 def write_histograms_dataset(ds, erange=(0,20000), binsize=5):
-    basename = mass.output_basename_from_ljh_fname(ds.filename)+"_chan%d"%ds.channum
+    dirname, basename = path.split(mass.output_basename_from_ljh_fname(ds.filename))
+    dirname = path.join(dirname, "channel_histograms")
+    try:
+        os.mkdir(dirname)
+    except OSError:
+        pass
+    basename = path.join(dirname, basename+"_chan%d"%ds.channum)
     for laser_choice in ["laser", "not_laser","pumped", "unpumped"]:
         pulse_timing.choose_laser_dataset(ds, laser_choice)
         write_histogram_dataset(ds, basename+laser_choice, erange, binsize)
@@ -179,14 +189,24 @@ def plot_combined_spectra(data, erange=(0,20000), binsize=5, ref_lines = [], cha
             ax.set_title("coadded PUMPED AND UNPUMPED %d pixel"%data.num_good_channels)
             plt.legend()
 
-def save_all_plots(data):
+def save_all_plots(data, filename, noisename):
     basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
     dir, fname = path.split(basename)
     print("writing %d plots as png to %s"%(len(plt.get_fignums()), dir))
-    for i in plt.get_fignums():
-        print("writing plot %d of %d"%(i, len(plt.get_fignums())))
-        plt.figure(i)
-        plt.savefig(path.join(dir,'figure%d.png') % i, dpi=600)
+    with PdfPages(path.join(dir, fname+"all_figures.pdf")) as pdf:
+        for i in plt.get_fignums():
+            print("writing plot %d of %d to pdf"%(i, len(plt.get_fignums())))
+            pdf.savefig(i)
+            print("writing plot %d of %d as png"%(i, len(plt.get_fignums())))
+            plt.figure(i)
+            plt.savefig(path.join(dir,fname+'figure%d.png') % i, dpi=600)
+
+        d = pdf.infodict()
+        d['Title'] = filename
+        d['Author'] = noisename
+        d['CreationDate'] = datetime.datetime(2009, 11, 13)
+        d['ModDate'] = datetime.datetime.today()
+
 
 def fit_edges(data,edge_name , width_ev=400, bin_size_ev=3, fwhm_guess=10.0, doPlot=True):
     fit_params = np.array([fit_edge_in_energy_dataset(ds, edge_name, width_ev, bin_size_ev, fwhm_guess) for ds in data])
@@ -429,3 +449,20 @@ def write_combined_energies_hists_randsplit(data, erange=(0,20000), binsize=5, c
         basename = mass.output_basename_from_ljh_fname(data.first_good_dataset.filename)
         fname = basename+"_"+"randsplit_%d_B"%j+"_combined.spectrum"
         np.savetxt(fname, np.vstack((bin_centers, counts)).T,fmt=("%0.1f", "%i"), header="energy bin centers (eV), counts per bin")
+
+def cut_vs_time_plot(ds):
+    plt.figure(figsize=(12,6))
+    plt.subplot(121)
+    cmap_func = plt.get_cmap("rainbow")
+    cmap = [cmap_func(i/float(len(ds.CUT_NAME))) for i in xrange(len(ds.CUT_NAME))]
+    downsample_factor = 4000
+    for cutnum, cutname in enumerate(ds.CUT_NAME):
+        times = pulse_timing.downsampled(ds.p_timestamp,downsample_factor)
+        cut_fracs = pulse_timing.downsampled(ds.cuts.isCut(cutnum), downsample_factor)
+        plt.plot(times, cut_fracs,'.' if cutnum%2==0 else '.', c=cmap[cutnum], label=cutname)
+    plt.grid("on")
+    plt.legend()
+    plt.xlabel("time (s)")
+    plt.ylabel("fraction cut by thing in legend")
+    plt.legend(bbox_to_anchor=(1,1,0,0), loc="upper left")
+    plt.title("channel %g"%ds.channum)
