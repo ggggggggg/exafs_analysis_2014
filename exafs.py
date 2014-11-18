@@ -77,7 +77,7 @@ def fit_edge_hist(bins, counts, fwhm_guess=10.0):
     chi2 = np.sum(((counts - model_counts)**2)/model_counts)/num_degree_of_freedom
     return (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2)
 
-def fit_edge_in_energy_dataset(ds, edge_name, width_ev=400, bin_size_ev=3, fwhm_guess=10.0, doPlot=False):
+def fit_edge_in_energy_dataset(ds, edge_name, width_ev=300, bin_size_ev=3, fwhm_guess=10.0, doPlot=False):
     if not edge_name[-4:].lower()=="edge": raise ValueError("%s is not an edge"%edge_name)
     low_energy, high_energy = mass.energy_calibration.STANDARD_FEATURES[edge_name] +  np.array([-0.5, 0.5])*width_ev
     bin_edges = np.arange(low_energy, high_energy, bin_size_ev)
@@ -322,8 +322,15 @@ def edge_center_func(ds):
 def chi2_func(ds):
     return fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)[5]
 
+def edge_drop_func(ds):
+    (edgeCenter, preHeight, postHeight, fwhm, bgSlope, chi2) = fit_edge_in_energy_dataset(ds, "FeKEdge", doPlot=False)
+    if postHeight == 0:
+        return np.inf
+    return np.log(preHeight/postHeight)
+
 def fwhm_ev_7kev(ds):
     return np.mean(ds.calibration["p_filt_value_tdc"].energy_resolutions[6:9])
+
 
 def undo_quality_control(data):
     for k in data.why_chan_bad:
@@ -461,7 +468,6 @@ def cut_vs_time_plot(ds):
         cut_fracs = pulse_timing.downsampled(ds.cuts.isCut(cutnum), downsample_factor)
         plt.plot(times, cut_fracs,'.' if cutnum%2==0 else '.', c=cmap[cutnum], label=cutname)
     plt.grid("on")
-    plt.legend()
     plt.xlabel("time (s)")
     plt.ylabel("fraction cut by thing in legend")
     plt.legend(bbox_to_anchor=(1,1,0,0), loc="upper left")

@@ -108,8 +108,12 @@ def apply_offsets_for_monotonicity(data, test=False, doPlot=True, forceNew=False
     offsets_seconds = (offsets_rowcount/number_of_rows-0.3)*timebase
     # I don't understand why the constant offset is neccesary, or why it has that value, and I don't know if it will work with other datasets
     print("applying time offsets to all datasets", offsets)
+    # apply_offsets_for_monotonicity_dataset(offsets_seconds, ds, test, forceNew)
     for ds in data:
-        apply_offsets_for_monotonicity_dataset(offsets_seconds, ds, test, forceNew)
+        try:
+            apply_offsets_for_monotonicity_dataset(offsets_seconds, ds, test, forceNew)
+        except:
+            data.set_chan_bad(ds.channum, "apply offsets for monotonicity")
     apply_offset_for_monotonicity_external_trigger(offsets_rowcount, data.first_good_dataset)
     if doPlot:
         plt.figure()
