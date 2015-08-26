@@ -17,3 +17,5 @@ server_log.txt
 
 *.png
 
+
+*.ipynb
