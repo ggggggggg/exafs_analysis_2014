@@ -12,3 +12,8 @@ server_log.txt
 *.zip
 
 *.txt
+
+*.dat
+
+*.png
+

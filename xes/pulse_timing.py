@@ -170,9 +170,6 @@ def calc_laser_cuts_dataset(ds, forceNew=False, keep_size=0.012, exclude_size=0.
         return
     for s in ["pumped_bool", "unpumped_bool", "not_laser_bool"]:
         if s in ds.hdf5_group: del(ds.hdf5_group[s])
-
-    ds.p_laser_phase = ds.hdf5_group["p_laser_phase"]
-
     ds.hdf5_group["pumped_bool"] = np.abs(ds.p_laser_phase[:]-0.5)<keep_size
     ds.hdf5_group["unpumped_bool"] = np.abs(ds.p_laser_phase[:]-1.5)<keep_size
     ds.hdf5_group["not_laser_bool"] = np.logical_and(np.abs(ds.p_laser_phase[:]-0.5)>exclude_size, np.abs(ds.p_laser_phase[:]-1.5)>exclude_size)
