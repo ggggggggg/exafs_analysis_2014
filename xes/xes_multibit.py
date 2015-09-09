@@ -12,11 +12,11 @@ import datetime
 
 
 dir_base = "/Volumes/Drobo/exafs_data/"
-dir_p = "20150902_iron_tris_xes_delay_m24p5/"
+dir_p = "20150825_iron_tris_xes_multi_delay/"
 # dir_p = "20150808_50mM_irontris_xes_m20mm_55mm/"
 # New dir_p here
 
-dir_n = "20150902_iron_tris_xes_delay_m24p5_noise"
+dir_n = "20150825_iron_tris_xes_multi_delay_noise"
 # New dir_n here
 run_str = dir_p[:8]
 
@@ -258,6 +258,9 @@ params_names = ["shift_ev", "f", "amplitude", "fwhm", "tail_size_ev", "tail_frac
 
 for k in spectra:
     bin_centers, pumped_hist, unpumped_hist = spectra[k]["bin_centers"][lo:hi], spectra[k]["pumped"][lo:hi], spectra[k]["unpumped"][lo:hi]
+    if (pumped_hist+unpumped_hist).sum()<1000:
+        print("SKIPPING FIT ON %s DUE TO TOO FEW PULSES, N=%i"%(k,(pumped_hist+unpumped_hist).sum()))
+        continue
 
     singlet_intensity = np.interp(bin_centers, singlet[:,0], singlet[:,1])
     quintet_intensity = np.interp(bin_centers, quintet[:,0], quintet[:,1])
